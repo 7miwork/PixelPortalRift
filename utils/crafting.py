@@ -119,15 +119,12 @@ class CraftingSystem:
             
             ing_x = panel_x + 150
             tiny_font = pygame.font.Font(None, 18)
-            for ingredient, count in recipe_data["ingredients"].items():
+            for idx, (ingredient, count) in enumerate(recipe_data["ingredients"].items()):
                 has_count = inventory.count_item(ingredient)
                 ing_color = (100, 255, 100) if has_count >= count else (255, 100, 100)
                 ing_text = tiny_font.render(f"{ingredient}: {has_count}/{count}", True, ing_color)
-                screen.blit(ing_text, (ing_x, y + 8))
-                ing_x += 80
-                if ing_x > panel_x + panel_width - 60:
-                    ing_x = panel_x + 150
-                    y += 12
+                line_y = y + 8 + idx * 22
+                screen.blit(ing_text, (ing_x, line_y))
         
         if len(self.craftable_recipes) > max_visible:
             scrollbar_height = int((max_visible / len(self.craftable_recipes)) * (panel_height - 100))

@@ -179,6 +179,7 @@ class Game:
             return
         
         if self.inventory.is_open:
+            self.inventory.handle_mouse_click(event.pos, self.screen)
             return
         
         mouse_x, mouse_y = event.pos

@@ -75,6 +75,13 @@ class Inventory:
         self.slots = [InventorySlot() for _ in range(size)]
         self.selected_slot = 0
         self.is_open = False
+
+        # Drag-and-drop state
+        self.held_item = None
+        self.held_count = 0
+        self.held_durability = None
+        self.held_origin_slot = None
+        self.mouse_pos = (0, 0)
         
     def add_item(self, item_name, count=1, durability=None):
         remaining = count
@@ -161,6 +168,78 @@ class Inventory:
     def toggle_open(self):
         self.is_open = not self.is_open
     
+    def get_slot_at_pos(self, mouse_pos, screen):
+        slot_size = 50
+        padding = 4
+        cols = 9
+        rows = self.size // cols
+        total_width = cols * (slot_size + padding) - padding
+        total_height = rows * (slot_size + padding) - padding
+        start_x = (screen.get_width() - total_width) // 2
+        start_y = (screen.get_height() - total_height) // 2
+
+        mx, my = mouse_pos
+        for i in range(self.size):
+            row = i // cols
+            col = i % cols
+            x = start_x + col * (slot_size + padding)
+            y = start_y + row * (slot_size + padding)
+            if x <= mx <= x + slot_size and y <= my <= y + slot_size:
+                return i
+        return None
+
+    def handle_mouse_click(self, mouse_pos, screen):
+        self.mouse_pos = mouse_pos
+        slot_index = self.get_slot_at_pos(mouse_pos, screen)
+        if slot_index is None:
+            return
+
+        target_slot = self.slots[slot_index]
+
+        if self.held_item is None:
+            # Pick up item from clicked slot
+            if not target_slot.is_empty():
+                self.held_item = target_slot.item
+                self.held_count = target_slot.count
+                self.held_durability = target_slot.durability
+                self.held_origin_slot = slot_index
+                target_slot.item = None
+                target_slot.count = 0
+                target_slot.durability = None
+        else:
+            # Place held item into clicked slot
+            if target_slot.is_empty():
+                target_slot.item = self.held_item
+                target_slot.count = self.held_count
+                target_slot.durability = self.held_durability
+                self.held_item = None
+                self.held_count = 0
+                self.held_durability = None
+                self.held_origin_slot = None
+            elif target_slot.item == self.held_item:
+                # Same item — stack as much as possible
+                props = ITEM_PROPERTIES.get(self.held_item, {"stackable": True, "max_stack": 64})
+                max_stack = props.get("max_stack", 64)
+                space = max_stack - target_slot.count
+                to_move = min(self.held_count, space)
+                target_slot.count += to_move
+                self.held_count -= to_move
+                if self.held_count <= 0:
+                    self.held_item = None
+                    self.held_count = 0
+                    self.held_durability = None
+                    self.held_origin_slot = None
+            else:
+                # Different item — swap
+                origin_slot = self.slots[self.held_origin_slot]
+                (origin_slot.item, target_slot.item) = (target_slot.item, self.held_item)
+                (origin_slot.count, target_slot.count) = (target_slot.count, self.held_count)
+                (origin_slot.durability, target_slot.durability) = (target_slot.durability, self.held_durability)
+                self.held_item = None
+                self.held_count = 0
+                self.held_durability = None
+                self.held_origin_slot = None
+
     def swap_slots(self, slot1, slot2):
         if 0 <= slot1 < self.size and 0 <= slot2 < self.size:
             self.slots[slot1], self.slots[slot2] = self.slots[slot2], self.slots[slot1]
@@ -204,49 +283,57 @@ class Inventory:
     def draw_full_inventory(self, screen, asset_loader):
         if not self.is_open:
             return
-        
+
         overlay = pygame.Surface((screen.get_width(), screen.get_height()), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 180))
         screen.blit(overlay, (0, 0))
-        
+
         slot_size = 50
         padding = 4
         cols = 9
         rows = self.size // cols
-        
+
         total_width = cols * (slot_size + padding) - padding
         total_height = rows * (slot_size + padding) - padding
         start_x = (screen.get_width() - total_width) // 2
         start_y = (screen.get_height() - total_height) // 2
-        
+
         bg_rect = pygame.Rect(start_x - 20, start_y - 60, total_width + 40, total_height + 100)
         pygame.draw.rect(screen, (60, 60, 60), bg_rect)
         pygame.draw.rect(screen, (100, 100, 100), bg_rect, 3)
-        
+
         font = pygame.font.Font(None, 36)
         title = font.render("Inventory", True, (255, 255, 255))
         screen.blit(title, (start_x, start_y - 45))
-        
+
         for i in range(self.size):
             row = i // cols
             col = i % cols
             x = start_x + col * (slot_size + padding)
             y = start_y + row * (slot_size + padding)
             slot = self.slots[i]
-            
+
             pygame.draw.rect(screen, (40, 40, 40), (x, y, slot_size, slot_size))
             pygame.draw.rect(screen, (80, 80, 80), (x, y, slot_size, slot_size), 2)
-            
+
             if not slot.is_empty():
                 texture = asset_loader.get_item_texture(slot.item)
                 if texture:
                     scaled = pygame.transform.scale(texture, (slot_size - 8, slot_size - 8))
                     screen.blit(scaled, (x + 4, y + 4))
-                
+
                 if slot.count > 1:
                     count_font = pygame.font.Font(None, 20)
                     count_text = count_font.render(str(slot.count), True, (255, 255, 255))
                     screen.blit(count_text, (x + slot_size - 15, y + slot_size - 18))
+
+        # Draw held item following the cursor
+        if self.held_item is not None:
+            texture = asset_loader.get_item_texture(self.held_item)
+            if texture:
+                scaled = pygame.transform.scale(texture, (40, 40))
+                mx, my = self.mouse_pos
+                screen.blit(scaled, (mx - 20, my - 20))
     
     def get_save_data(self):
         data = []

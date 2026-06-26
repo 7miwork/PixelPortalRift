@@ -11,7 +11,7 @@ class PortalSystem:
     def check_portal_structure(self, world, x, y, dimension=None):
         required_height = 4
         required_width = 3
-        portal_block = f"portal_frame_{dimension}" if dimension else "portal_frame"
+        portal_block = "portal_frame"
         
         for check_y in range(y, y + required_height):
             if world.get_block(x, check_y) != portal_block:
