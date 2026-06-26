@@ -8,20 +8,21 @@ class PortalSystem:
         self.animation_frame = 0
         self.animation_timer = 0
         
-    def check_portal_structure(self, world, x, y):
+    def check_portal_structure(self, world, x, y, dimension=None):
         required_height = 4
         required_width = 3
+        portal_block = f"portal_frame_{dimension}" if dimension else "portal_frame"
         
         for check_y in range(y, y + required_height):
-            if world.get_block(x, check_y) != "portal_frame":
+            if world.get_block(x, check_y) != portal_block:
                 return None
-            if world.get_block(x + required_width - 1, check_y) != "portal_frame":
+            if world.get_block(x + required_width - 1, check_y) != portal_block:
                 return None
         
         for check_x in range(x, x + required_width):
-            if world.get_block(check_x, y) != "portal_frame":
+            if world.get_block(check_x, y) != portal_block:
                 return None
-            if world.get_block(check_x, y + required_height - 1) != "portal_frame":
+            if world.get_block(check_x, y + required_height - 1) != portal_block:
                 return None
         
         for check_x in range(x + 1, x + required_width - 1):
@@ -32,16 +33,16 @@ class PortalSystem:
         
         return (x, y, required_width, required_height)
     
-    def find_portal_at(self, world, click_x, click_y):
+    def find_portal_at(self, world, click_x, click_y, dimension=None):
         for dx in range(-3, 1):
             for dy in range(-4, 1):
-                result = self.check_portal_structure(world, click_x + dx, click_y + dy)
+                result = self.check_portal_structure(world, click_x + dx, click_y + dy, dimension)
                 if result:
                     return result
         return None
     
-    def activate_portal(self, world, x, y, width, height, target_dimension, inventory):
-        dimension_data = DIMENSIONS.get(world.dimension, {})
+    def activate_portal(self, world, x, y, width, height, current_dimension, inventory):
+        dimension_data = DIMENSIONS.get(current_dimension, {})
         next_dim = dimension_data.get("next_dimension")
         
         if next_dim and next_dim != "dimensional_rift":

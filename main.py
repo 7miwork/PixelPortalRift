@@ -5,8 +5,8 @@ import os
 os.environ['SDL_AUDIODRIVER'] = 'dummy'
 
 from utils.constants import (
-    SCREEN_WIDTH, SCREEN_HEIGHT, FPS, TILE_SIZE,    
-    DIMENSIONS, BLOCK_PROPERTIES, ITEM_PROPERTIES
+    SCREEN_WIDTH, SCREEN_HEIGHT, FPS, TILE_SIZE,
+    DIMENSIONS, BLOCK_PROPERTIES, ITEM_PROPERTIES, MAX_INTERACTION_RANGE
 )
 from utils.asset_loader import AssetLoader
 from utils.player import Player
@@ -62,7 +62,7 @@ class Game:
             "left": False,
             "right": False
         }
-        self.jump_pressed = False
+        self.jump_key_was_pressed = False
     
     def give_starter_items(self):
         self.inventory.add_item("wooden_pickaxe", 1)
@@ -125,11 +125,6 @@ class Game:
         elif event.key == pygame.K_d or event.key == pygame.K_RIGHT:
             self.keys_held["right"] = True
         
-        elif event.key in [pygame.K_SPACE, pygame.K_w, pygame.K_UP]:
-            if not self.jump_pressed:
-                self.player.jump()
-                self.jump_pressed = True
-        
         elif event.key == pygame.K_e:
             self.inventory.toggle_open()
             if self.inventory.is_open:
@@ -160,10 +155,22 @@ class Game:
             self.keys_held["left"] = False
         elif event.key == pygame.K_d or event.key == pygame.K_RIGHT:
             self.keys_held["right"] = False
-        if event.key in [pygame.K_SPACE, pygame.K_w, pygame.K_UP]:
-            self.jump_pressed = False
         if not self.keys_held["left"] and not self.keys_held["right"]:
             self.player.move("stop")
+    
+    def is_within_range(self, world_x, world_y):
+        """Prueft, ob der Block innerhalb der maximalen Interaktions-Reichweite liegt."""
+        player_tiles = [
+            (int(self.player.x // TILE_SIZE), int(self.player.y // TILE_SIZE)),
+            (int((self.player.x + self.player.width) // TILE_SIZE), int(self.player.y // TILE_SIZE)),
+            (int(self.player.x // TILE_SIZE), int((self.player.y + self.player.height) // TILE_SIZE)),
+            (int((self.player.x + self.player.width) // TILE_SIZE), int((self.player.y + self.player.height) // TILE_SIZE))
+        ]
+        
+        min_dx = min(abs(world_x - px) for px, _ in player_tiles)
+        min_dy = min(abs(world_y - py) for _, py in player_tiles)
+        distance = (min_dx ** 2 + min_dy ** 2) ** 0.5
+        return distance <= MAX_INTERACTION_RANGE
     
     def handle_mouse_click(self, event):
         if self.crafting.is_open:
@@ -180,14 +187,20 @@ class Game:
         world_y = (mouse_y + camera_y) // TILE_SIZE
         
         if event.button == 1:
+            if not self.is_within_range(world_x, world_y):
+                self.show_message("Too far away!")
+                return
+            
             block = self.world.get_block(world_x, world_y)
             if block and block != "air":
                 if block == "portal":
                     target = self.portal_system.check_player_portal(self.player.get_rect(), self.world)
                     if target:
                         self.travel_to_dimension(target)
-                elif block == "portal_frame":
-                    portal_struct = self.portal_system.find_portal_at(self.world, world_x, world_y)
+                elif block.startswith("portal_frame"):
+                    portal_struct = self.portal_system.find_portal_at(
+                        self.world, world_x, world_y, self.current_dimension
+                    )
                     if portal_struct:
                         x, y, w, h = portal_struct
                         success, msg = self.portal_system.activate_portal(
@@ -195,6 +208,8 @@ class Game:
                             self.current_dimension, self.inventory
                         )
                         self.show_message(msg)
+                    else:
+                        self.show_message("Portal structure incomplete!")
                 else:
                     drop = self.world.break_block(world_x, world_y)
                     if drop:
@@ -210,6 +225,10 @@ class Game:
                 props = ITEM_PROPERTIES.get(selected_item, {})
                 
                 if props.get("type") == "block":
+                    if not self.is_within_range(world_x, world_y):
+                        self.show_message("Too far away!")
+                        return
+                    
                     current_block = self.world.get_block(world_x, world_y)
                     if current_block == "air" or current_block is None:
                         player_tiles = [
@@ -264,6 +283,17 @@ class Game:
             self.player.move("left")
         elif self.keys_held["right"]:
             self.player.move("right")
+        
+        # -------- SPRUNG (Rising-Edge-Erkennung, entkoppelt vom Event-System) --------
+        jump_now = (
+            pygame.key.get_pressed()[pygame.K_SPACE] or
+            pygame.key.get_pressed()[pygame.K_w] or
+            pygame.key.get_pressed()[pygame.K_UP]
+        )
+        if jump_now and not self.jump_key_was_pressed:
+            if self.player.on_ground and not self.player.is_jumping:
+                self.player.jump()
+        self.jump_key_was_pressed = jump_now
         
         self.player.update(self.world, dt)
         self.portal_system.update(dt)

@@ -48,15 +48,24 @@ class Player:
         # -------- VERTICAL --------
         new_y = self.y + self.velocity_y
         
-        if not self.check_collision_y(world, new_y):
+        hit_ceiling = self.check_ceiling_collision(world, new_y)
+        hit_floor = self.check_floor_collision(world, new_y)
+        
+        if not hit_ceiling and not hit_floor:
+            # Frei fallen/schweben
             self.y = new_y
             self.on_ground = False
+        elif hit_floor and self.velocity_y >= 0:
+            # Landung auf Boden — exakt auf Tile-Kante setzen
+            self.y = (int((new_y + self.height) // TILE_SIZE) * TILE_SIZE) - self.height
+            self.on_ground = True
+            self.is_jumping = False
+            self.velocity_y = 0
+        elif hit_ceiling:
+            # Kopf stößt an Decke
+            self.velocity_y = 0
         else:
-            if self.velocity_y > 0:
-                # Landed on ground - snap to exact tile position
-                self.y = (int((self.y + self.height) // TILE_SIZE) * TILE_SIZE) - self.height
-                self.on_ground = True
-                self.is_jumping = False
+            # Sicherheitsnetz: Bodenkontakt aber velocity_y < 0
             self.velocity_y = 0
 
         # -------- HUNGER / HEALTH --------
@@ -89,31 +98,32 @@ class Player:
                 return True
         return False
 
-    def check_collision_y(self, world, y):
-        # Check TOP (ceiling) and BOTTOM (ground)
-        points_top = [
+    def check_ceiling_collision(self, world, y):
+        """Prueft, ob der Kopf (Oberkante) an einen festen Block stoesst."""
+        points = [
             (self.x + 2, y),
             (self.x + self.width - 2, y),
         ]
-        points_bottom = [
+        for px, py in points:
+            tile_x = int(px) // TILE_SIZE
+            tile_y = int(py) // TILE_SIZE
+            block = world.get_block(tile_x, tile_y)
+            if block and world.is_solid(block):
+                return True
+        return False
+
+    def check_floor_collision(self, world, y):
+        """Prueft, ob die Fuesse (Unterkante) auf einem festen Block stehen."""
+        points = [
             (self.x + 2, y + self.height),
             (self.x + self.width - 2, y + self.height),
         ]
-
-        for px, py in points_top:
+        for px, py in points:
             tile_x = int(px) // TILE_SIZE
             tile_y = int(py) // TILE_SIZE
             block = world.get_block(tile_x, tile_y)
             if block and world.is_solid(block):
                 return True
-
-        for px, py in points_bottom:
-            tile_x = int(px) // TILE_SIZE
-            tile_y = int(py) // TILE_SIZE
-            block = world.get_block(tile_x, tile_y)
-            if block and world.is_solid(block):
-                return True
-
         return False
 
     # =========================================================
@@ -134,6 +144,8 @@ class Player:
             self.velocity_y = -self.jump_power
             self.on_ground = False
             self.is_jumping = True
+            return True
+        return False
 
     # =========================================================
     # HEALTH

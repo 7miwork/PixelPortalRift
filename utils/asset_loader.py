@@ -171,9 +171,12 @@ class AssetLoader:
             for i in range(0, TILE_SIZE, 4):
                 alpha = 100 + (i * 4) % 100
                 pygame.draw.rect(surface, (*color[:3], alpha), (i, 0, 2, TILE_SIZE))
-        elif block_name == "portal_frame":
-            pygame.draw.rect(surface, (100, 0, 150), (2, 2, TILE_SIZE-4, TILE_SIZE-4))
-            pygame.draw.rect(surface, (50, 0, 100), (4, 4, TILE_SIZE-8, TILE_SIZE-8))
+        elif block_name.startswith("portal_frame"):
+            props = BLOCK_PROPERTIES.get(block_name, {})
+            color = props.get("color", (100, 0, 150))
+            border = tuple(max(0, c - 40) for c in color[:3])
+            pygame.draw.rect(surface, color, (2, 2, TILE_SIZE-4, TILE_SIZE-4))
+            pygame.draw.rect(surface, border, (4, 4, TILE_SIZE-8, TILE_SIZE-8))
         elif block_name == "water":
             for i in range(0, TILE_SIZE, 6):
                 wave_offset = (i % 12) - 6

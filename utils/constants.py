@@ -5,13 +5,15 @@ SCREEN_HEIGHT = 800
 TILE_SIZE = 32
 FPS = 60
 
+# Maximale Interaktions-Reichweite in Blöcken (Abbauen/Platzieren)
+MAX_INTERACTION_RANGE = 3
+
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 GRAY = (128, 128, 128)
 RED = (255, 0, 0)
 GREEN = (0, 255, 0)
-BLUE = (0, 0, 255)
-BROWN = (139, 69, 19)
+BLUE = (0, 255, 255)
 DARK_GREEN = (0, 100, 0)
 LIGHT_BLUE = (135, 206, 235)
 DARK_GRAY = (64, 64, 64)
@@ -107,7 +109,11 @@ BLOCK_PROPERTIES = {
     "lead": {"solid": True, "hardness": 4, "tool": "pickaxe", "drop": "lead", "color": (80, 80, 90)},
     "reactor_core": {"solid": True, "hardness": 8, "tool": "pickaxe", "drop": "reactor_core", "color": (255, 255, 0)},
     "contaminated_stone": {"solid": True, "hardness": 3, "tool": "pickaxe", "drop": "contaminated_stone", "color": (100, 128, 100)},
-    "portal_frame": {"solid": True, "hardness": 10, "tool": "pickaxe", "drop": "portal_frame", "color": (75, 0, 130)},
+    "portal_frame_grassland": {"solid": True, "hardness": 6, "tool": "pickaxe", "drop": "portal_frame_grassland", "color": (34, 139, 34)},
+    "portal_frame_stone_world": {"solid": True, "hardness": 8, "tool": "pickaxe", "drop": "portal_frame_stone_world", "color": (128, 128, 128)},
+    "portal_frame_water_world": {"solid": True, "hardness": 7, "tool": "pickaxe", "drop": "portal_frame_water_world", "color": (0, 100, 200)},
+    "portal_frame_gem_world": {"solid": True, "hardness": 10, "tool": "pickaxe", "drop": "portal_frame_gem_world", "color": (75, 0, 130)},
+    "portal_frame_nuclear_world": {"solid": True, "hardness": 12, "tool": "pickaxe", "drop": "portal_frame_nuclear_world", "color": (50, 50, 0)},
     "portal": {"solid": False, "hardness": 0, "tool": None, "drop": None, "color": (138, 43, 226)}
 }
 
@@ -159,7 +165,11 @@ ITEM_PROPERTIES = {
     "healing_potion": {"stackable": True, "max_stack": 16, "type": "healing", "heal": 10},
     
     # Blöcke
-    "portal_frame": {"stackable": True, "max_stack": 64, "type": "block"},
+    "portal_frame_grassland": {"stackable": True, "max_stack": 64, "type": "block"},
+    "portal_frame_stone_world": {"stackable": True, "max_stack": 64, "type": "block"},
+    "portal_frame_water_world": {"stackable": True, "max_stack": 64, "type": "block"},
+    "portal_frame_gem_world": {"stackable": True, "max_stack": 64, "type": "block"},
+    "portal_frame_nuclear_world": {"stackable": True, "max_stack": 64, "type": "block"},
     "obsidian": {"stackable": True, "max_stack": 64, "type": "block"},
     "sand": {"stackable": True, "max_stack": 64, "type": "block"},
     "gravel": {"stackable": True, "max_stack": 64, "type": "block"},
@@ -279,20 +289,26 @@ CRAFTING_RECIPES = {
     "diamond_pickaxe": {"ingredients": {"diamond": 3, "stick": 2}, "result_count": 1},
     "diamond_sword": {"ingredients": {"diamond": 2, "stick": 1}, "result_count": 1},
     
-    # Portal-Materialien
-    "portal_frame": {"ingredients": {"obsidian": 4, "diamond": 1}, "result_count": 1},
-    "stone_key": {"ingredients": {"cobblestone": 8, "iron_ingot": 1}, "result_count": 1},
-    "water_key": {"ingredients": {"pearl": 4, "crystal_shard": 2}, "result_count": 1},
-    "gem_key": {"ingredients": {"ruby": 2, "emerald": 2, "amethyst": 2}, "result_count": 1},
+    # Portal-Frames (pro Welt, nur mit dort verfuegbaren Ressourcen)
+    "portal_frame_grassland": {"ingredients": {"cobblestone": 10, "coal": 4, "iron_ore": 2}, "result_count": 1},
+    "portal_frame_stone_world": {"ingredients": {"iron_ingot": 4, "gold_ingot": 2, "diamond": 1}, "result_count": 1},
+    "portal_frame_water_world": {"ingredients": {"pearl": 4, "coral": 6, "anchor_piece": 1}, "result_count": 1},
+    "portal_frame_gem_world": {"ingredients": {"obsidian": 6, "diamond": 2, "sapphire": 1}, "result_count": 1},
+    "portal_frame_nuclear_world": {"ingredients": {"lead": 8, "reactor_core": 2, "thorium": 1}, "result_count": 1},
     
-    # Nuklearer Schlüssel
-    "nuclear_key": {"ingredients": {"uranium": 4, "lead": 4, "reactor_core": 1}, "result_count": 1},
+    # Portal-Schluessel
+    "stone_key": {"ingredients": {"cobblestone": 12, "iron_ingot": 2, "gold_ore": 2}, "result_count": 1},
+    "water_key": {"ingredients": {"pearl": 6, "coral": 4, "ship_plank": 1}, "result_count": 1},
+    "gem_key": {"ingredients": {"ruby": 3, "emerald": 3, "amethyst": 3, "opal": 1}, "result_count": 1},
+    
+    # Nuklearer Schluessel
+    "nuclear_key": {"ingredients": {"uranium": 6, "lead": 6, "reactor_core": 2, "radium": 1}, "result_count": 1},
     
     # Radioaktiver Schutzanzug (nur mit Nuclear-World-Materialien)
     "radiation_suit": {"ingredients": {"lead": 8, "uranium": 2, "radioactive_crystal": 1}, "result_count": 1},
     
     # Verbrauchsmaterialien
-    "healing_potion": {"ingredients": {"apple": 2, "crystal_shard": 1}, "result_count": 1},
+    "healing_potion": {"ingredients": {"apple": 2, "coal": 1}, "result_count": 1},
     "bread": {"ingredients": {"seaweed": 3}, "result_count": 2},
     "cooked_fish": {"ingredients": {"raw_fish": 1, "coal": 1}, "result_count": 1},
     "torch": {"ingredients": {"stick": 1, "coal": 1}, "result_count": 4},
