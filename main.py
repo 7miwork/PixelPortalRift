@@ -1,6 +1,7 @@
 import pygame
 import sys
 import os
+import random
 
 os.environ['SDL_AUDIODRIVER'] = 'dummy'
 
@@ -63,6 +64,11 @@ class Game:
             "right": False
         }
         self.jump_key_was_pressed = False
+        
+        # Rare visual event state
+        self.rare_event_active = False
+        self.rare_event_timer = 0
+        self.rare_event_duration = 0
     
     def give_starter_items(self):
         self.inventory.add_item("wooden_pickaxe", 1)
@@ -224,6 +230,11 @@ class Game:
                             self.show_message(f"Got {drop}!")
                         else:
                             self.show_message("Inventory full!")
+                        
+                        # Trigger rare visual event with 0.1% probability
+                        if random.random() < 0.001:
+                            self.rare_event_active = True
+                            self.rare_event_timer = 1200
         
         elif event.button == 3:
             selected_item = self.inventory.get_selected_item()
@@ -325,6 +336,12 @@ class Game:
         if result == "3D_WORLD":
             self.show_message("Welcome to the 3D world! (Coming soon...)")
             self.dimensional_rift.is_active = False
+        
+        # Update rare visual event timer
+        if self.rare_event_active:
+            self.rare_event_timer -= dt
+            if self.rare_event_timer <= 0:
+                self.rare_event_active = False
     
     def travel_to_dimension(self, target_dimension):
         if target_dimension == "dimensional_rift":
@@ -414,6 +431,16 @@ class Game:
             self.draw_game_over()
         
         self.dimensional_rift.draw(self.screen)
+        
+        # Rare visual event overlay
+        if self.rare_event_active:
+            progress = 1.0 - (self.rare_event_timer / 1200.0)
+            hue = (progress * 360) % 360
+            color = pygame.Color(0, 0, 0)
+            color.hsva = (hue, 80, 100, 25)
+            overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+            overlay.fill(color)
+            self.screen.blit(overlay, (0, 0))
     
     def draw_world(self, camera_x, camera_y):
         start_x = max(0, int(camera_x // TILE_SIZE) - 1)
