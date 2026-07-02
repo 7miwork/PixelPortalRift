@@ -138,6 +138,11 @@ class Game:
         elif event.key == pygame.K_h:
             self.show_help = not self.show_help
         
+        elif event.key == pygame.K_g:
+            self.player.creative_mode = not self.player.creative_mode
+            mode = "ON" if self.player.creative_mode else "OFF"
+            self.show_message(f"Creative Mode: {mode}")
+        
         elif event.key == pygame.K_F5:
             success, msg = self.save_system.save_game(self.get_game_state())
             self.show_message(msg)
@@ -242,11 +247,13 @@ class Game:
                         if (world_x, world_y) not in player_tiles:
                             if selected_item in BLOCK_PROPERTIES:
                                 if self.world.set_block(world_x, world_y, selected_item):
-                                    self.inventory.use_selected_item()
+                                    if not self.player.creative_mode:
+                                        self.inventory.use_selected_item()
                             else:
                                 block_name = selected_item
                                 if self.world.set_block(world_x, world_y, block_name):
-                                    self.inventory.use_selected_item()
+                                    if not self.player.creative_mode:
+                                        self.inventory.use_selected_item()
                 
                 elif props.get("type") == "food":
                     heal = props.get("heal", 0)
@@ -298,7 +305,7 @@ class Game:
         
         self.player.update(self.world, dt)
         self.portal_system.update(dt)
-        self.mob_manager.update(self.world, self.player, dt)
+        self.mob_manager.update(self.world, self.player, self.inventory, dt)
         
         target = self.portal_system.check_player_portal(self.player.get_rect(), self.world)
         if target and target != self.current_dimension:

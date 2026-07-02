@@ -28,6 +28,9 @@ class Player:
 
         self.asset_loader = asset_loader
         self.texture = asset_loader.get_player_texture()
+        
+        # Creative-Modus (Taste G zum Umschalten)
+        self.creative_mode = False
 
     # =========================================================
     # UPDATE
@@ -40,10 +43,21 @@ class Player:
         else:
             self.velocity_x = 0
 
-        # -------- GRAVITY --------
-        self.velocity_y += self.gravity
-        if self.velocity_y > 15:
-            self.velocity_y = 15
+        # -------- GRAVITY / FLIEGEN --------
+        # Im Creative-Modus: Keine Gravity, dafür Flugsteuerung
+        if self.creative_mode:
+            fly_speed = 5
+            if pygame.key.get_pressed()[pygame.K_w] or pygame.key.get_pressed()[pygame.K_UP] or pygame.key.get_pressed()[pygame.K_SPACE]:
+                self.velocity_y = -fly_speed
+            elif pygame.key.get_pressed()[pygame.K_s] or pygame.key.get_pressed()[pygame.K_DOWN]:
+                self.velocity_y = fly_speed
+            else:
+                self.velocity_y = 0
+        else:
+            # Normale Gravity
+            self.velocity_y += self.gravity
+            if self.velocity_y > 15:
+                self.velocity_y = 15
 
         # -------- VERTICAL --------
         new_y = self.y + self.velocity_y
@@ -69,12 +83,14 @@ class Player:
             self.velocity_y = 0
 
         # -------- HUNGER / HEALTH --------
-        self.hunger_timer += dt
-        if self.hunger_timer >= 5000:
-            self.hunger = max(0, self.hunger - 1)
-            self.hunger_timer = 0
-            if self.hunger <= 0:
-                self.health = max(0, self.health - 1)
+        # Im Creative-Modus: Kein Hunger-Abbau und kein Health-Verlust
+        if not self.creative_mode:
+            self.hunger_timer += dt
+            if self.hunger_timer >= 5000:
+                self.hunger = max(0, self.hunger - 1)
+                self.hunger_timer = 0
+                if self.hunger <= 0:
+                    self.health = max(0, self.health - 1)
 
         if self.damage_cooldown > 0:
             self.damage_cooldown -= dt
@@ -141,7 +157,7 @@ class Player:
 
     def jump(self):
         if self.on_ground and not self.is_jumping:
-            self.velocity_y = -self.jump_power
+            self.velocity_y = -self.jump_power * 0.3
             self.on_ground = False
             self.is_jumping = True
             return True
@@ -151,6 +167,9 @@ class Player:
     # HEALTH
     # =========================================================
     def take_damage(self, amount):
+        # Im Creative-Modus: Kein Schaden
+        if self.creative_mode:
+            return False
         if self.damage_cooldown <= 0:
             self.health = max(0, self.health - amount)
             self.damage_cooldown = 1000
@@ -230,3 +249,9 @@ class Player:
             font.render(f"Hunger: {int(self.hunger)}/{self.max_hunger}", True, (255, 255, 255)),
             (x + 5, y + 28)
         )
+        
+        # Creative-Modus Anzeige
+        if self.creative_mode:
+            creative_font = pygame.font.Font(None, 24)
+            creative_text = creative_font.render("CREATIVE MODE", True, (0, 255, 255))
+            screen.blit(creative_text, (x, y + 55))

@@ -185,7 +185,7 @@ class MobManager:
         self.spawn_timer = 0
         self.max_mobs = 15
     
-    def update(self, world, player, dt):
+    def update(self, world, player, inventory, dt):
         self.spawn_timer += dt
         
         if self.spawn_timer >= 5000 and len(self.mobs) < self.max_mobs:
@@ -196,9 +196,13 @@ class MobManager:
             mob.update(world, player, dt)
             
             if not mob.is_alive():
-                drop = mob.get_world_drop(world.dimension)
+                # Boss-Mobs droppen garantiert ein Spezial-Item
+                if mob.properties.get("is_boss", False):
+                    drop = "overpowered_sword"
+                else:
+                    drop = mob.get_world_drop(world.dimension)
                 if drop:
-                    pass
+                    inventory.add_item(drop)
                 self.mobs.remove(mob)
     
     def try_spawn_mob(self, world, player):

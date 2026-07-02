@@ -154,6 +154,7 @@ ITEM_PROPERTIES = {
     "stone_sword": {"stackable": False, "max_stack": 1, "type": "weapon", "damage": 5, "durability": 132},
     "iron_sword": {"stackable": False, "max_stack": 1, "type": "weapon", "damage": 6, "durability": 251},
     "diamond_sword": {"stackable": False, "max_stack": 1, "type": "weapon", "damage": 8, "durability": 1000},
+    "overpowered_sword": {"stackable": False, "max_stack": 1, "type": "weapon", "damage": 50, "durability": 2500},
     
     # Essen
     "apple": {"stackable": True, "max_stack": 64, "type": "food", "heal": 4, "hunger": 4},
@@ -223,7 +224,7 @@ MOB_PROPERTIES = {
     "bat": {"health": 5, "damage": 1, "speed": 2, "drop": None, "color": DARK_GRAY, "size": (16, 16)},
     "fish": {"health": 5, "damage": 0, "speed": 1.5, "drop": "raw_fish", "color": ORANGE, "size": (16, 12)},
     "shark": {"health": 30, "damage": 6, "speed": 1.2, "drop": "shark_tooth", "color": GRAY, "size": (40, 20)},
-    "crystal_golem": {"health": 60, "damage": 6, "speed": 0.4, "drop": "crystal_shard", "color": PURPLE, "size": (32, 40)},
+    "crystal_golem": {"health": 60, "damage": 6, "speed": 0.4, "drop": "crystal_shard", "color": PURPLE, "size": (32, 40), "is_boss": True},
     "gem_spider": {"health": 15, "damage": 4, "speed": 1.5, "drop": "ruby", "color": RED, "size": (24, 16)},
     "mutant": {"health": 40, "damage": 8, "speed": 1.0, "drop": "uranium", "color": (150, 255, 0), "size": (28, 36)},
     "radioactive_slime": {"health": 25, "damage": 5, "speed": 0.8, "drop": "nuclear_waste", "color": (100, 255, 100), "size": (28, 28)}

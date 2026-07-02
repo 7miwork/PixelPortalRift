@@ -47,7 +47,7 @@ class CraftingSystem:
             self.update_craftable(inventory)
     
     def scroll(self, direction):
-        max_visible = 8
+        max_visible = 7
         max_scroll = max(0, len(self.craftable_recipes) - max_visible)
         self.scroll_offset = max(0, min(max_scroll, self.scroll_offset + direction))
     
@@ -72,8 +72,8 @@ class CraftingSystem:
         overlay.fill((0, 0, 0, 180))
         screen.blit(overlay, (0, 0))
         
-        panel_width = 400
-        panel_height = 500
+        panel_width = 600
+        panel_height = 520
         panel_x = (SCREEN_WIDTH - panel_width) // 2
         panel_y = (SCREEN_HEIGHT - panel_height) // 2
         
@@ -85,7 +85,7 @@ class CraftingSystem:
         screen.blit(title, (panel_x + 20, panel_y + 15))
         
         recipe_height = 55
-        max_visible = 8
+        max_visible = 7
         start_y = panel_y + 60
         
         for i in range(max_visible):
@@ -109,7 +109,13 @@ class CraftingSystem:
             
             name_color = (255, 255, 255) if can_craft else (150, 150, 150)
             small_font = pygame.font.Font(None, 24)
-            name_text = small_font.render(recipe_name.replace("_", " ").title(), True, name_color)
+            raw_name = recipe_name.replace("_", " ").title()
+            
+            # Kürze Rezeptnamen, die zu lang sind
+            if small_font.size(raw_name)[0] > 200:
+                name_text = small_font.render(raw_name[:18] + "...", True, name_color)
+            else:
+                name_text = small_font.render(raw_name, True, name_color)
             screen.blit(name_text, (panel_x + 60, y + 5))
             
             result_count = recipe_data.get("result_count", 1)
@@ -117,7 +123,7 @@ class CraftingSystem:
                 count_text = small_font.render(f"x{result_count}", True, (200, 200, 200))
                 screen.blit(count_text, (panel_x + 60, y + 25))
             
-            ing_x = panel_x + 150
+            ing_x = panel_x + 270
             tiny_font = pygame.font.Font(None, 18)
             for idx, (ingredient, count) in enumerate(recipe_data["ingredients"].items()):
                 has_count = inventory.count_item(ingredient)
@@ -127,27 +133,32 @@ class CraftingSystem:
                 screen.blit(ing_text, (ing_x, line_y))
         
         if len(self.craftable_recipes) > max_visible:
-            scrollbar_height = int((max_visible / len(self.craftable_recipes)) * (panel_height - 100))
-            scrollbar_y = panel_y + 60 + int((self.scroll_offset / len(self.craftable_recipes)) * (panel_height - 100))
+            scrollbar_height = int((max_visible / len(self.craftable_recipes)) * (panel_height - 120))
+            scrollbar_y = panel_y + 60 + int((self.scroll_offset / len(self.craftable_recipes)) * (panel_height - 120))
             pygame.draw.rect(screen, (150, 150, 150), (panel_x + panel_width - 15, scrollbar_y, 10, scrollbar_height))
         
+        # Fußzeile in eigenem Bereich am unteren Rand
+        footer_y = panel_y + panel_height - 35
+        pygame.draw.rect(screen, (40, 40, 40), (panel_x, footer_y - 5, panel_width, 35))
         help_font = pygame.font.Font(None, 24)
         instructions = help_font.render("Click to craft | Scroll to browse | C to close", True, (200, 200, 200))
-        screen.blit(instructions, (panel_x + 20, panel_y + panel_height - 30))
+        text_rect = instructions.get_rect(center=(SCREEN_WIDTH // 2, footer_y + 10))
+        screen.blit(instructions, text_rect)
     
     def handle_click(self, mouse_pos, inventory):
         if not self.is_open:
             return False
         
-        panel_width = 400
-        panel_height = 500
+        panel_width = 600
+        panel_height = 520
         panel_x = (SCREEN_WIDTH - panel_width) // 2
         panel_y = (SCREEN_HEIGHT - panel_height) // 2
         
         recipe_height = 55
+        max_visible = 7
         start_y = panel_y + 60
         
-        for i in range(8):
+        for i in range(max_visible):
             recipe_index = i + self.scroll_offset
             if recipe_index >= len(self.craftable_recipes):
                 break
