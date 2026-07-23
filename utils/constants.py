@@ -110,6 +110,10 @@ BLOCK_PROPERTIES = {
     "reactor_core": {"solid": True, "hardness": 8, "tool": "pickaxe", "drop": "reactor_core", "color": (255, 255, 0)},
     "contaminated_stone": {"solid": True, "hardness": 3, "tool": "pickaxe", "drop": "contaminated_stone", "color": (100, 128, 100)},
     "portal_frame_grassland": {"solid": True, "hardness": 6, "tool": "pickaxe", "drop": "portal_frame_grassland", "color": (34, 139, 34)},
+    "ancient_key_vein": {"solid": True, "hardness": 5, "tool": "pickaxe", "drop": "stone_key", "color": (120, 110, 100)},
+    "frozen_key_vein": {"solid": True, "hardness": 7, "tool": "pickaxe", "drop": "water_key", "color": (180, 200, 220)},
+    "pearl_key_vein": {"solid": True, "hardness": 6, "tool": "pickaxe", "drop": "gem_key", "color": (220, 200, 240)},
+    "crystal_key_vein": {"solid": True, "hardness": 8, "tool": "pickaxe", "drop": "nuclear_key", "color": (160, 100, 200)},
     "portal_frame_stone_world": {"solid": True, "hardness": 8, "tool": "pickaxe", "drop": "portal_frame_stone_world", "color": (128, 128, 128)},
     "portal_frame_water_world": {"solid": True, "hardness": 7, "tool": "pickaxe", "drop": "portal_frame_water_world", "color": (0, 100, 200)},
     "portal_frame_gem_world": {"solid": True, "hardness": 10, "tool": "pickaxe", "drop": "portal_frame_gem_world", "color": (75, 0, 130)},
@@ -235,25 +239,25 @@ WORLD_ITEM_POOLS = {
     "grassland": {
         "common": ["dirt", "cobblestone", "coal", "wood"],
         "uncommon": ["stick", "apple", "leaves"],
-        "rare": ["iron_ore", "gold_ore"],
+        "rare": ["iron_ore", "gold_ore", "ancient_key_vein"],
         "mob_drops": ["slime_ball", "rotten_flesh"]
     },
     "stone_world": {
         "common": ["stone", "cobblestone", "coal", "gravel", "iron_ore"],
         "uncommon": ["gold_ore", "stick"],
-        "rare": ["diamond", "emerald", "ruby"],
+        "rare": ["diamond", "emerald", "ruby", "frozen_key_vein"],
         "mob_drops": ["iron_ingot", "rotten_flesh"]
     },
     "water_world": {
         "common": ["sand", "clay", "coral", "seaweed", "water"],
         "uncommon": ["pearl", "driftwood", "shell", "rope"],
-        "rare": ["anchor_piece", "ship_plank", "cooked_fish"],
+        "rare": ["anchor_piece", "ship_plank", "cooked_fish", "pearl_key_vein"],
         "mob_drops": ["raw_fish", "shark_tooth", "cooked_fish"]
     },
     "gem_world": {
         "common": ["crystal", "amethyst", "obsidian"],
         "uncommon": ["ruby", "emerald", "diamond"],
-        "rare": ["sapphire", "topaz", "opal"],
+        "rare": ["sapphire", "topaz", "opal", "crystal_key_vein"],
         "mob_drops": ["crystal_shard", "ruby", "emerald"]
     },
     "nuclear_world": {
@@ -292,13 +296,13 @@ CRAFTING_RECIPES = {
     
     # Portal-Frames (pro Welt, nur mit dort verfuegbaren Ressourcen)
     "portal_frame_grassland": {"ingredients": {"cobblestone": 10, "coal": 4, "iron_ore": 2}, "result_count": 1},
-    "portal_frame_stone_world": {"ingredients": {"iron_ingot": 4, "gold_ingot": 2, "diamond": 1}, "result_count": 1},
+    "portal_frame_stone_world": {"ingredients": {"cobblestone": 10, "coal": 4, "iron_ore": 2}, "result_count": 1},
     "portal_frame_water_world": {"ingredients": {"pearl": 4, "coral": 6, "anchor_piece": 1}, "result_count": 1},
     "portal_frame_gem_world": {"ingredients": {"obsidian": 6, "diamond": 2, "sapphire": 1}, "result_count": 1},
     "portal_frame_nuclear_world": {"ingredients": {"lead": 8, "reactor_core": 2, "thorium": 1}, "result_count": 1},
     
     # Portal-Schluessel
-    "stone_key": {"ingredients": {"cobblestone": 12, "iron_ingot": 2, "gold_ore": 2}, "result_count": 1},
+    "stone_key": {"ingredients": {"cobblestone": 12, "iron_ore": 1, "gold_ore": 1}, "result_count": 1},
     "water_key": {"ingredients": {"pearl": 6, "coral": 4, "ship_plank": 1}, "result_count": 1},
     "gem_key": {"ingredients": {"ruby": 3, "emerald": 3, "amethyst": 3, "opal": 1}, "result_count": 1},
     

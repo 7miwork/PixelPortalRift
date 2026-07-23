@@ -157,7 +157,7 @@ class Player:
 
     def jump(self):
         if self.on_ground and not self.is_jumping:
-            self.velocity_y = -self.jump_power * 0.3
+            self.velocity_y = -self.jump_power
             self.on_ground = False
             self.is_jumping = True
             return True

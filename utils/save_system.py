@@ -28,7 +28,8 @@ class SaveSystem:
             "current_dimension": game_state["current_dimension"],
             "visited_dimensions": list(game_state["visited_dimensions"]),
             "portals": game_state["portal_system"].get_save_data(),
-            "mobs": game_state["mob_manager"].get_save_data()
+            "mobs": game_state["mob_manager"].get_save_data(),
+            "dimension_cache": game_state.get("dimension_cache", {})
         }
         
         try:

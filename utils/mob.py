@@ -185,6 +185,14 @@ class MobManager:
         self.spawn_timer = 0
         self.max_mobs = 15
     
+    # Zuordnung: je Welt der stärkere Mob und der passende Schlüssel zur nächsten Welt
+    WORLD_KEY_DROP = {
+        "grassland": ("zombie", "stone_key"),
+        "stone_world": ("golem", "water_key"),
+        "water_world": ("shark", "gem_key"),
+        "gem_world": ("gem_spider", "nuclear_key")
+    }
+
     def update(self, world, player, inventory, dt):
         self.spawn_timer += dt
         
@@ -196,11 +204,19 @@ class MobManager:
             mob.update(world, player, dt)
             
             if not mob.is_alive():
-                # Boss-Mobs droppen garantiert ein Spezial-Item
-                if mob.properties.get("is_boss", False):
-                    drop = "overpowered_sword"
-                else:
-                    drop = mob.get_world_drop(world.dimension)
+                drop = None
+                # Zuerst prüfen, ob es sich um den stärkeren Mob der Welt handelt
+                # und eine garantierte (!) kleine Chance auf den Welt-Schlüssel besteht
+                world_rule = self.WORLD_KEY_DROP.get(world.dimension)
+                if world_rule and world_rule[0] == mob.mob_type:
+                    if random.random() < 0.10:
+                        drop = world_rule[1]
+                # Normale Loot-Regeln anwenden, falls kein Schlüssel gedroppt wurde
+                if drop is None:
+                    if mob.properties.get("is_boss", False):
+                        drop = "overpowered_sword"
+                    else:
+                        drop = mob.get_world_drop(world.dimension)
                 if drop:
                     inventory.add_item(drop)
                 self.mobs.remove(mob)

@@ -35,6 +35,9 @@ class Game:
         self.current_dimension = "grassland"
         self.visited_dimensions = {"grassland"}
         
+        # Cache für vollständige Welten-Persistenz: speichert besuchte, aber aktuell nicht aktive Welten
+        self.dimension_cache = {}
+        
         self.world = World(self.current_dimension)
         self.inventory = Inventory()
         self.player = Player(
@@ -232,7 +235,7 @@ class Game:
                             self.show_message("Inventory full!")
                         
                         # Trigger rare visual event with 0.1% probability
-                        if random.random() < 0.001:
+                        if random.random() < 0.1:
                             self.rare_event_active = True
                             self.rare_event_timer = 1200
         
@@ -350,18 +353,38 @@ class Game:
             return
         
         if target_dimension in DIMENSIONS:
+            # Zuerst den aktuellen Weltzustand im Cache sichern, bevor gewechselt wird
+            self.dimension_cache[self.current_dimension] = {
+                "world": self.world.get_save_data(),
+                "portals": self.portal_system.get_save_data(),
+                "mobs": self.mob_manager.get_save_data()
+            }
+            
             self.current_dimension = target_dimension
             self.visited_dimensions.add(target_dimension)
-            self.world = World(target_dimension)
+            
+            # Wenn die Zielwelt bereits im Cache vorhanden ist, aus dem Cache wiederherstellen
+            if target_dimension in self.dimension_cache:
+                cached = self.dimension_cache[target_dimension]
+                self.world = World(target_dimension)
+                self.world.load_save_data(cached.get("world", {}))
+                self.portal_system.load_save_data(cached.get("portals", {}))
+                self.mob_manager.load_save_data(cached.get("mobs", []))
+            else:
+                # Erster Besuch: Welt komplett frisch generieren
+                self.world = World(target_dimension)
+                self.mob_manager.clear_mobs()
+                self.portal_system.active_portals.clear()
+            
+            # Spieler an den Spawn-Punkt der Welt setzen
             self.player.x = self.world.spawn_point[0]
             self.player.y = self.world.spawn_point[1]
             self.player.velocity_x = 0
             self.player.velocity_y = 0
-            self.mob_manager.clear_mobs()
-            self.portal_system.active_portals.clear()
             self.show_message(f"Welcome to {DIMENSIONS[target_dimension]['name']}!")
     
     def get_game_state(self):
+        """Sammelt den aktuellen Spielzustand für die Speicherfunktion."""
         return {
             "player": self.player,
             "inventory": self.inventory,
@@ -369,14 +392,19 @@ class Game:
             "current_dimension": self.current_dimension,
             "visited_dimensions": self.visited_dimensions,
             "portal_system": self.portal_system,
-            "mob_manager": self.mob_manager
+            "mob_manager": self.mob_manager,
+            "dimension_cache": self.dimension_cache
         }
     
     def load_game(self):
+        """Lädt einen gespeicherten Spielstand und stellt auch den dimension_cache wieder her."""
         save_data, msg = self.save_system.load_game()
         if save_data:
             self.current_dimension = save_data["current_dimension"]
             self.visited_dimensions = set(save_data["visited_dimensions"])
+            
+            # dimension_cache mit Abwärtskompatibilität: alte Spielstände ohne dieses Feld crashen nicht
+            self.dimension_cache = save_data.get("dimension_cache", {})
             
             self.world = World(self.current_dimension)
             self.world.load_save_data(save_data["world"])
@@ -516,6 +544,19 @@ class Game:
         self.screen.blit(title, ((SCREEN_WIDTH - title.get_width()) // 2, 50))
         
         small_font = pygame.font.Font(None, 28)
+        
+        # Dynamischer Hinweis auf den aktuell benötigten Portal-Schlüssel
+        dimension_data = DIMENSIONS.get(self.current_dimension, {})
+        next_dim = dimension_data.get("next_dimension")
+        required_key = None
+        if next_dim and next_dim != "dimensional_rift":
+            next_dim_data = DIMENSIONS.get(next_dim, {})
+            required_key = next_dim_data.get("portal_activator")
+        
+        key_hint = "None"
+        if required_key:
+            key_hint = required_key.replace("_", " ").title()
+        
         controls = [
             "A/D or Arrow Keys - Move left/right",
             "Space/W/Up - Jump",
@@ -531,7 +572,7 @@ class Game:
             "H - Show/Hide this help",
             "",
             "BUILD PORTAL: Place portal_frame blocks in a 3x4 frame",
-            "ACTIVATE PORTAL: Click the frame with the required key",
+            f"ACTIVATE PORTAL: Click the frame with the required key ({key_hint})",
             "EXPLORE: Visit all 5 dimensions to trigger the Dimensional Rift!"
         ]
         

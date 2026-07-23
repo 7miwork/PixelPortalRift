@@ -1,8 +1,6 @@
 # PixelPortalRift
 
 Ergaenzung:
-    - Huepfen
-    - Umkreis fuers abbauen und bauen
     - Portallogik (muss zur Welt passen)
     - Crafting menue (muss zur Welt passen)
     - Spezielle Superstarke Gegner wenn besiegt droppen diese einen spezielles

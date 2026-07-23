@@ -72,21 +72,21 @@ class CraftingSystem:
         overlay.fill((0, 0, 0, 180))
         screen.blit(overlay, (0, 0))
         
-        panel_width = 600
-        panel_height = 520
+        panel_width = 700
+        panel_height = 760
         panel_x = (SCREEN_WIDTH - panel_width) // 2
         panel_y = (SCREEN_HEIGHT - panel_height) // 2
         
         pygame.draw.rect(screen, (60, 60, 60), (panel_x, panel_y, panel_width, panel_height))
         pygame.draw.rect(screen, (100, 100, 100), (panel_x, panel_y, panel_width, panel_height), 3)
         
-        font = pygame.font.Font(None, 36)
+        font = pygame.font.Font(None, 40)
         title = font.render("Crafting", True, (255, 255, 255))
         screen.blit(title, (panel_x + 20, panel_y + 15))
         
-        recipe_height = 55
+        recipe_height = 90
         max_visible = 7
-        start_y = panel_y + 60
+        start_y = panel_y + 70
         
         for i in range(max_visible):
             recipe_index = i + self.scroll_offset
@@ -100,63 +100,63 @@ class CraftingSystem:
             if recipe_index == self.selected_recipe:
                 bg_color = (100, 100, 150) if can_craft else (70, 70, 90)
             
-            pygame.draw.rect(screen, bg_color, (panel_x + 10, y, panel_width - 20, recipe_height - 5))
+            pygame.draw.rect(screen, bg_color, (panel_x + 10, y, panel_width - 20, recipe_height - 8))
             
             texture = asset_loader.get_item_texture(recipe_name)
             if texture:
-                scaled = pygame.transform.scale(texture, (40, 40))
-                screen.blit(scaled, (panel_x + 15, y + 5))
+                scaled = pygame.transform.scale(texture, (48, 48))
+                screen.blit(scaled, (panel_x + 20, y + 10))
             
             name_color = (255, 255, 255) if can_craft else (150, 150, 150)
-            small_font = pygame.font.Font(None, 24)
+            small_font = pygame.font.Font(None, 28)
             raw_name = recipe_name.replace("_", " ").title()
             
             # Kürze Rezeptnamen, die zu lang sind
-            if small_font.size(raw_name)[0] > 200:
-                name_text = small_font.render(raw_name[:18] + "...", True, name_color)
+            if small_font.size(raw_name)[0] > 240:
+                name_text = small_font.render(raw_name[:20] + "...", True, name_color)
             else:
                 name_text = small_font.render(raw_name, True, name_color)
-            screen.blit(name_text, (panel_x + 60, y + 5))
+            screen.blit(name_text, (panel_x + 80, y + 12))
             
             result_count = recipe_data.get("result_count", 1)
             if result_count > 1:
                 count_text = small_font.render(f"x{result_count}", True, (200, 200, 200))
-                screen.blit(count_text, (panel_x + 60, y + 25))
+                screen.blit(count_text, (panel_x + 80, y + 38))
             
-            ing_x = panel_x + 270
-            tiny_font = pygame.font.Font(None, 18)
+            ing_x = panel_x + 320
+            tiny_font = pygame.font.Font(None, 22)
             for idx, (ingredient, count) in enumerate(recipe_data["ingredients"].items()):
                 has_count = inventory.count_item(ingredient)
                 ing_color = (100, 255, 100) if has_count >= count else (255, 100, 100)
                 ing_text = tiny_font.render(f"{ingredient}: {has_count}/{count}", True, ing_color)
-                line_y = y + 8 + idx * 22
+                line_y = y + 12 + idx * 26
                 screen.blit(ing_text, (ing_x, line_y))
         
         if len(self.craftable_recipes) > max_visible:
-            scrollbar_height = int((max_visible / len(self.craftable_recipes)) * (panel_height - 120))
-            scrollbar_y = panel_y + 60 + int((self.scroll_offset / len(self.craftable_recipes)) * (panel_height - 120))
-            pygame.draw.rect(screen, (150, 150, 150), (panel_x + panel_width - 15, scrollbar_y, 10, scrollbar_height))
+            scrollbar_height = int((max_visible / len(self.craftable_recipes)) * (panel_height - 160))
+            scrollbar_y = panel_y + 70 + int((self.scroll_offset / len(self.craftable_recipes)) * (panel_height - 160))
+            pygame.draw.rect(screen, (150, 150, 150), (panel_x + panel_width - 20, scrollbar_y, 14, scrollbar_height))
         
         # Fußzeile in eigenem Bereich am unteren Rand
-        footer_y = panel_y + panel_height - 35
-        pygame.draw.rect(screen, (40, 40, 40), (panel_x, footer_y - 5, panel_width, 35))
-        help_font = pygame.font.Font(None, 24)
+        footer_y = panel_y + panel_height - 45
+        pygame.draw.rect(screen, (40, 40, 40), (panel_x, footer_y - 5, panel_width, 45))
+        help_font = pygame.font.Font(None, 26)
         instructions = help_font.render("Click to craft | Scroll to browse | C to close", True, (200, 200, 200))
-        text_rect = instructions.get_rect(center=(SCREEN_WIDTH // 2, footer_y + 10))
+        text_rect = instructions.get_rect(center=(SCREEN_WIDTH // 2, footer_y + 12))
         screen.blit(instructions, text_rect)
     
     def handle_click(self, mouse_pos, inventory):
         if not self.is_open:
             return False
         
-        panel_width = 600
-        panel_height = 520
+        panel_width = 700
+        panel_height = 760
         panel_x = (SCREEN_WIDTH - panel_width) // 2
         panel_y = (SCREEN_HEIGHT - panel_height) // 2
         
-        recipe_height = 55
+        recipe_height = 90
         max_visible = 7
-        start_y = panel_y + 60
+        start_y = panel_y + 70
         
         for i in range(max_visible):
             recipe_index = i + self.scroll_offset
