@@ -29,7 +29,8 @@ os.environ['SDL_AUDIODRIVER'] = 'dummy'
 
 from utils.constants import (
     SCREEN_WIDTH, SCREEN_HEIGHT, FPS, TILE_SIZE,
-    DIMENSIONS, BLOCK_PROPERTIES, ITEM_PROPERTIES, MAX_INTERACTION_RANGE
+    DIMENSIONS, BLOCK_PROPERTIES, ITEM_PROPERTIES, MAX_INTERACTION_RANGE,
+    VOID_Y, VOID_DAMAGE_INTERVAL
 )
 from utils.asset_loader import AssetLoader
 from utils.player import Player
@@ -39,6 +40,7 @@ from utils.crafting import CraftingSystem
 from utils.portal import PortalSystem, DimensionalRift
 from utils.mob import MobManager
 from utils.save_system import SaveSystem
+from utils.item_spawner import ItemSpawnerMenu
 
 
 class Game:
@@ -105,12 +107,14 @@ class Game:
         self.portal_system = PortalSystem()
         self.dimensional_rift = DimensionalRift()
         self.mob_manager = MobManager(self.asset_loader)
+        self.item_spawner_menu = ItemSpawnerMenu()
         
         self.give_starter_items()
         
         self.game_state = "playing"
         self.paused = False
         self.show_help = False
+        self.show_coords = False
         self.message = ""
         self.message_timer = 0
         
@@ -178,7 +182,12 @@ class Game:
     
     def handle_keydown(self, event):
         if event.key == pygame.K_ESCAPE:
-            if self.crafting.is_open:
+            # ESC-Priorität: Zuerst das Item-Spawner-Menü schließen, dann Crafting,
+            # dann Inventar, dann Pause. So werden sich nicht überlappende Menüs
+            # nacheinander sauber geschlossen.
+            if self.item_spawner_menu.is_open:
+                self.item_spawner_menu.close()
+            elif self.crafting.is_open:
                 self.crafting.is_open = False
             elif self.inventory.is_open:
                 self.inventory.is_open = False
@@ -215,6 +224,19 @@ class Game:
         elif event.key == pygame.K_F9:
             self.load_game()
         
+        elif event.key == pygame.K_F3:
+            self.show_coords = not self.show_coords
+        
+        elif event.key == pygame.K_k:
+            # Geheime Tastenkombination: Strg + Umschalt + K öffnet das Item-Spawner-Menü.
+            # Ein einzelnes "k" ohne Modifikatoren tut nichts.
+            mods = pygame.key.get_mods()
+            if mods & pygame.KMOD_CTRL and mods & pygame.KMOD_SHIFT:
+                self.item_spawner_menu.toggle_open(self.inventory)
+                # Andere Menüs automatisch schließen, damit sie sich nicht überlappen
+                self.inventory.is_open = False
+                self.crafting.is_open = False
+        
         elif event.key in [pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5,
                           pygame.K_6, pygame.K_7, pygame.K_8, pygame.K_9]:
             slot = event.key - pygame.K_1
@@ -243,6 +265,12 @@ class Game:
         return distance <= MAX_INTERACTION_RANGE
     
     def handle_mouse_click(self, event):
+        # Höchste Priorität: Item-Spawner-Menü
+        if self.item_spawner_menu.is_open:
+            if self.item_spawner_menu.handle_click(event.pos, self.inventory, self.show_message):
+                pass  # Nachricht wird bereits in handle_click angezeigt
+            return
+        
         if self.crafting.is_open:
             if self.crafting.handle_click(event.pos, self.inventory):
                 self.show_message("Item crafted!")
@@ -254,8 +282,12 @@ class Game:
         
         mouse_x, mouse_y = event.pos
         camera_x, camera_y = self.player.get_camera_offset()
-        world_x = (mouse_x + camera_x) // TILE_SIZE
-        world_y = (mouse_y + camera_y) // TILE_SIZE
+        # Explizit zu int casten, damit keine Floats in range()-Aufrufe gelangen.
+        # Hinweis: camera_x/camera_y sind Floats, deswegen muss das Ergebnis
+        # von // TILE_SIZE zusätzlich mit int() in einen ganzen Zahlwert
+        # umgewandelt werden.
+        world_x = int((mouse_x + camera_x) // TILE_SIZE)
+        world_y = int((mouse_y + camera_y) // TILE_SIZE)
         
         if event.button == 1:
             if not self.is_within_range(world_x, world_y):
@@ -374,6 +406,9 @@ class Game:
         self.jump_key_was_pressed = jump_now
         
         self.player.update(self.world, dt)
+        # Auch die Respawn-Warteschlange der aktuellen Welt weiter verarbeiten,
+        # damit abgebaute Ressourcen nach Ablauf der respawn_time automatisch zurückkehren.
+        self.world.update(dt)
         self.portal_system.update(dt)
         self.mob_manager.update(self.world, self.player, self.inventory, dt)
         
@@ -383,6 +418,10 @@ class Game:
         
         if self.message_timer > 0:
             self.message_timer -= dt
+        
+        # Void-Schaden: Wenn der Spieler zu tief unter der Welt ist, nimmt er Schaden.
+        if self.player.y // TILE_SIZE < VOID_Y:
+            self.player.take_damage(1)
         
         if not self.player.is_alive():
             self.game_state = "game_over"
@@ -488,6 +527,25 @@ class Game:
         else:
             self.show_message(msg)
     
+    def draw_coords(self):
+        """
+        Zeichnet die aktuellen Koordinaten des Spielers oben links auf den Bildschirm.
+        
+        Zeigt Block-Koordinaten (x, y) und Pixel-Koordinaten an.
+        """
+        font = pygame.font.Font(None, 24)
+        block_x = int(self.player.x // TILE_SIZE)
+        block_y = int(self.player.y // TILE_SIZE)
+        pixel_x = int(self.player.x)
+        pixel_y = int(self.player.y)
+        
+        text = f"X: {block_x} Y: {block_y} | PX: {pixel_x} PY: {pixel_y}"
+        rendered = font.render(text, True, (255, 255, 255))
+        shadow = font.render(text, True, (0, 0, 0))
+        
+        self.screen.blit(shadow, (11, 11))
+        self.screen.blit(rendered, (10, 10))
+    
     def draw(self):
         dimension_data = DIMENSIONS.get(self.current_dimension, {})
         sky_color = dimension_data.get("sky_color", (135, 206, 235))
@@ -514,11 +572,17 @@ class Game:
         if self.crafting.is_open:
             self.crafting.draw(self.screen, self.asset_loader, self.inventory)
         
+        # Verstecktes Item-Spawner-Menü zuletzt zeichnen, damit es über allem liegt
+        self.item_spawner_menu.draw(self.screen, self.asset_loader)
+        
         if self.paused:
             self.draw_pause_menu()
         
         if self.show_help:
             self.draw_help()
+        
+        if self.show_coords:
+            self.draw_coords()
         
         if self.game_state == "game_over":
             self.draw_game_over()
@@ -635,6 +699,7 @@ class Game:
             "F9 - Load game",
             "ESC - Pause/Close menus",
             "H - Show/Hide this help",
+            "F3 - Show/Hide coordinates",
             "",
             "BUILD PORTAL: Place portal_frame blocks in a 3x4 frame",
             f"ACTIVATE PORTAL: Click the frame with the required key ({key_hint})",

@@ -40,9 +40,29 @@ class PortalSystem:
         self.animation_timer = 0
         
     def check_portal_structure(self, world, x, y, dimension=None):
+        """
+        Prüft, ob an der Position (x, y) ein vollständiger Portal-Rahmen steht.
+        
+        In jeder Dimension gibt es einen anderen Rahmen-Block:
+        "portal_frame_grassland", "portal_frame_stone_world", etc.
+        Der Parameter dimension wird deshalb verwendet, um den korrekten
+        Blocknamen zu bilden.
+        
+        :param world: Die World-Instanz
+        :param x: Linke obere Ecke des Rahmens (Block-Koordinaten)
+        :param y: Linke obere Ecke des Rahmens (Block-Koordinaten)
+        :param dimension: Name der aktuellen Dimension (z.B. "grassland")
+        :return: (x, y, width, height) wenn komplett, sonst None
+        """
         required_height = 4
         required_width = 3
-        portal_block = "portal_frame"
+        
+        # Wenn keine Dimension angegeben ist, kann kein gültiger Rahmen erkannt werden
+        if dimension is None:
+            return None
+        
+        # Dimensionsspezifischer Rahmen-Block, z.B. "portal_frame_grassland"
+        portal_block = f"portal_frame_{dimension}"
         
         for check_y in range(y, y + required_height):
             if world.get_block(x, check_y) != portal_block:
@@ -110,15 +130,30 @@ class PortalSystem:
         self.active_portals.remove(portal_data)
     
     def check_player_portal(self, player_rect, world):
-        player_center_x = player_rect.centerx // TILE_SIZE
-        player_center_y = player_rect.centery // TILE_SIZE
+        """
+        Prüft, ob der Spieler aktuell in einem aktiven Portal steht.
         
-        block = world.get_block(player_center_x, player_center_y)
-        if block == "portal":
-            for portal in self.active_portals:
-                if (portal["x"] < player_center_x < portal["x"] + portal["width"] - 1 and
-                    portal["y"] < player_center_y < portal["y"] + portal["height"] - 1):
-                    return portal["target"]
+        Verwendet eine Rechteck-Kollisionsprüfung zwischen dem Spieler und dem
+        inneren Portalbereich. Dadurch wird die Erkennung deutlich zuverlässiger,
+        weil der Spieler nicht exakt auf einem Portal-Block stehen muss, sondern
+        es reicht, wenn sein Treffer-Rechteck den Portal-Innenbereich berührt.
+        
+        :param player_rect: pygame.Rect des Spielers (in Pixel-Koordinaten)
+        :param world: Die aktuelle World-Instanz
+        :return: Name der Ziel-Dimension oder None
+        """
+        for portal in self.active_portals:
+            # Portal-Innenbereich in Pixel-Koordinaten berechnen
+            portal_pixel_x = portal["x"] * TILE_SIZE
+            portal_pixel_y = portal["y"] * TILE_SIZE
+            portal_pixel_w = portal["width"] * TILE_SIZE
+            portal_pixel_h = portal["height"] * TILE_SIZE
+            
+            portal_rect = pygame.Rect(portal_pixel_x, portal_pixel_y, portal_pixel_w, portal_pixel_h)
+            
+            # Wenn der Spieler das Portal-Rechteck berührt, ist er drin
+            if player_rect.colliderect(portal_rect):
+                return portal["target"]
         
         return None
     

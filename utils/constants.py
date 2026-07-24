@@ -34,6 +34,16 @@ FPS = 60               # Das Spiel läuft mit 60 Bildern pro Sekunde (Frames Per
 MAX_INTERACTION_RANGE = 3
 
 # =========================================================
+# VOID / TODESGRENZE
+# =========================================================
+# Ab welcher y-Koordinate (Block-Koordinate) der Spieler Schaden durch den Void nimmt.
+# In Minecraft ist das typischerweise y = -64 oder niedriger. Hier verwenden wir einen
+# Wert, der unterhalb der normalen Welt liegt, damit Spieler in tiefen Höhlen nicht
+# sofort sterben. Der Standardwert -64 ist sicher unter WORLD_HEIGHT=100.
+VOID_Y = -64  # Unterhalb von y=-64: 1 Herz Schaden pro Sekunde
+VOID_DAMAGE_INTERVAL = 1000  # Wie oft Schaden genommen wird (in Millisekunden)
+
+# =========================================================
 # FARBEN (als RGB-Tupel: Rot, Grün, Blau)
 # Jede Farbe ist ein Wert zwischen 0 und 255.
 # =========================================================
@@ -140,37 +150,37 @@ BLOCK_PROPERTIES = {
     "dirt": {"solid": True, "hardness": 1, "tool": "shovel", "drop": "dirt", "color": (139, 90, 43)},
     "stone": {"solid": True, "hardness": 3, "tool": "pickaxe", "drop": "cobblestone", "color": (128, 128, 128)},
     "cobblestone": {"solid": True, "hardness": 3, "tool": "pickaxe", "drop": "cobblestone", "color": (100, 100, 100)},
-    "wood": {"solid": True, "hardness": 2, "tool": "axe", "drop": "wood", "color": (139, 90, 43)},
+    "wood": {"solid": True, "hardness": 2, "tool": "axe", "drop": "wood", "color": (139, 90, 43), "respawnable": True, "respawn_time": 90000},
     "leaves": {"solid": True, "hardness": 0.5, "tool": None, "drop": "stick", "color": (0, 128, 0)},
 
     # ---- Erze (Ores) ----
-    "coal_ore": {"solid": True, "hardness": 3, "tool": "pickaxe", "drop": "coal", "color": (50, 50, 50)},
-    "iron_ore": {"solid": True, "hardness": 4, "tool": "pickaxe", "drop": "iron_ore", "color": (180, 140, 100)},
-    "gold_ore": {"solid": True, "hardness": 4, "tool": "pickaxe", "drop": "gold_ore", "color": (255, 215, 0)},
-    "gravel": {"solid": True, "hardness": 1, "tool": "shovel", "drop": "gravel", "color": (150, 150, 150)},
+    "coal_ore": {"solid": True, "hardness": 3, "tool": "pickaxe", "drop": "coal", "color": (50, 50, 50), "respawnable": True, "respawn_time": 60000},
+    "iron_ore": {"solid": True, "hardness": 4, "tool": "pickaxe", "drop": "iron_ore", "color": (180, 140, 100), "respawnable": True, "respawn_time": 60000},
+    "gold_ore": {"solid": True, "hardness": 4, "tool": "pickaxe", "drop": "gold_ore", "color": (255, 215, 0), "respawnable": True, "respawn_time": 60000},
+    "gravel": {"solid": True, "hardness": 1, "tool": "shovel", "drop": "gravel", "color": (150, 150, 150), "respawnable": True, "respawn_time": 60000},
 
     # ---- Wasserwelt-Blöcke ----
     "water": {"solid": False, "hardness": 0, "tool": None, "drop": None, "color": (0, 100, 200, 180)},  # Alpha=180 = durchsichtig
     "sand": {"solid": True, "hardness": 1, "tool": "shovel", "drop": "sand", "color": (238, 214, 175)},
     "clay": {"solid": True, "hardness": 1, "tool": "shovel", "drop": "clay", "color": (160, 140, 120)},
-    "coral": {"solid": True, "hardness": 1, "tool": None, "drop": "coral", "color": (255, 127, 80)},
-    "seaweed": {"solid": False, "hardness": 0, "tool": None, "drop": "seaweed", "color": (0, 100, 0)},
-    "pearl_ore": {"solid": True, "hardness": 3, "tool": "pickaxe", "drop": "pearl", "color": (255, 240, 245)},
+    "coral": {"solid": True, "hardness": 1, "tool": None, "drop": "coral", "color": (255, 127, 80), "respawnable": True, "respawn_time": 60000},
+    "seaweed": {"solid": False, "hardness": 0, "tool": None, "drop": "seaweed", "color": (0, 100, 0), "respawnable": True, "respawn_time": 60000},
+    "pearl_ore": {"solid": True, "hardness": 3, "tool": "pickaxe", "drop": "pearl", "color": (255, 240, 245), "respawnable": True, "respawn_time": 120000},
 
     # ---- Edelsteinwelt-Blöcke ----
-    "crystal": {"solid": True, "hardness": 4, "tool": "pickaxe", "drop": "crystal_shard", "color": (200, 200, 255)},
-    "amethyst": {"solid": True, "hardness": 4, "tool": "pickaxe", "drop": "amethyst", "color": (153, 102, 204)},
-    "ruby_ore": {"solid": True, "hardness": 5, "tool": "pickaxe", "drop": "ruby", "color": (224, 17, 95)},
-    "emerald_ore": {"solid": True, "hardness": 5, "tool": "pickaxe", "drop": "emerald", "color": (0, 201, 87)},
-    "diamond_ore": {"solid": True, "hardness": 6, "tool": "pickaxe", "drop": "diamond", "color": (185, 242, 255)},
-    "obsidian": {"solid": True, "hardness": 10, "tool": "pickaxe", "drop": "obsidian", "color": (20, 20, 30)},
+    "crystal": {"solid": True, "hardness": 4, "tool": "pickaxe", "drop": "crystal_shard", "color": (200, 200, 255), "respawnable": True, "respawn_time": 120000},
+    "amethyst": {"solid": True, "hardness": 4, "tool": "pickaxe", "drop": "amethyst", "color": (153, 102, 204), "respawnable": True, "respawn_time": 120000},
+    "ruby_ore": {"solid": True, "hardness": 5, "tool": "pickaxe", "drop": "ruby", "color": (224, 17, 95), "respawnable": True, "respawn_time": 120000},
+    "emerald_ore": {"solid": True, "hardness": 5, "tool": "pickaxe", "drop": "emerald", "color": (0, 201, 87), "respawnable": True, "respawn_time": 120000},
+    "diamond_ore": {"solid": True, "hardness": 6, "tool": "pickaxe", "drop": "diamond", "color": (185, 242, 255), "respawnable": True, "respawn_time": 120000},
+    "obsidian": {"solid": True, "hardness": 10, "tool": "pickaxe", "drop": "obsidian", "color": (20, 20, 30), "respawnable": True, "respawn_time": 120000},
 
     # ---- Atomwelt-Blöcke ----
-    "uranium": {"solid": True, "hardness": 5, "tool": "pickaxe", "drop": "uranium", "color": (0, 255, 0)},
-    "plutonium": {"solid": True, "hardness": 6, "tool": "pickaxe", "drop": "plutonium", "color": (150, 255, 150)},
+    "uranium": {"solid": True, "hardness": 5, "tool": "pickaxe", "drop": "uranium", "color": (0, 255, 0), "respawnable": True, "respawn_time": 120000},
+    "plutonium": {"solid": True, "hardness": 6, "tool": "pickaxe", "drop": "plutonium", "color": (150, 255, 150), "respawnable": True, "respawn_time": 120000},
     "nuclear_waste": {"solid": True, "hardness": 2, "tool": "pickaxe", "drop": "nuclear_waste", "color": (100, 200, 0)},
     "lead": {"solid": True, "hardness": 4, "tool": "pickaxe", "drop": "lead", "color": (80, 80, 90)},
-    "reactor_core": {"solid": True, "hardness": 8, "tool": "pickaxe", "drop": "reactor_core", "color": (255, 255, 0)},
+    "reactor_core": {"solid": True, "hardness": 8, "tool": "pickaxe", "drop": "reactor_core", "color": (255, 255, 0), "respawnable": True, "respawn_time": 120000},
     "contaminated_stone": {"solid": True, "hardness": 3, "tool": "pickaxe", "drop": "contaminated_stone", "color": (100, 128, 100)},
 
     # ---- Portal-Blöcke ----
@@ -185,10 +195,10 @@ BLOCK_PROPERTIES = {
     # ---- Schlüssel-Adern (key_vein) ----
     # Diese speziellen Erz-Blöcke droppen beim Abbauen den Schlüssel für die nächste Welt.
     # Sie sind in der Welt versteckt und müssen gefunden werden.
-    "ancient_key_vein": {"solid": True, "hardness": 5, "tool": "pickaxe", "drop": "stone_key", "color": (120, 110, 100)},
-    "frozen_key_vein": {"solid": True, "hardness": 7, "tool": "pickaxe", "drop": "water_key", "color": (180, 200, 220)},
-    "pearl_key_vein": {"solid": True, "hardness": 6, "tool": "pickaxe", "drop": "gem_key", "color": (220, 200, 240)},
-    "crystal_key_vein": {"solid": True, "hardness": 8, "tool": "pickaxe", "drop": "nuclear_key", "color": (160, 100, 200)},
+    "ancient_key_vein": {"solid": True, "hardness": 5, "tool": "pickaxe", "drop": "stone_key", "color": (120, 110, 100), "respawnable": True, "respawn_time": 300000},
+    "frozen_key_vein": {"solid": True, "hardness": 7, "tool": "pickaxe", "drop": "water_key", "color": (180, 200, 220), "respawnable": True, "respawn_time": 300000},
+    "pearl_key_vein": {"solid": True, "hardness": 6, "tool": "pickaxe", "drop": "gem_key", "color": (220, 200, 240), "respawnable": True, "respawn_time": 300000},
+    "crystal_key_vein": {"solid": True, "hardness": 8, "tool": "pickaxe", "drop": "nuclear_key", "color": (160, 100, 200), "respawnable": True, "respawn_time": 300000},
 
     # ---- Portal-Mitte (wird automatisch gesetzt, wenn ein Portal aktiviert wird) ----
     "portal": {"solid": False, "hardness": 0, "tool": None, "drop": None, "color": (138, 43, 226)}
