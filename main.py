@@ -1,8 +1,30 @@
+"""
+main.py – Hauptprogramm von PixelPortalRift
+
+Dies ist die Hauptdatei des Spiels. Sie enthält die Klasse Game,
+die das gesamte Spiel steuert:
+- Initialisierung (Fenster, Grafik, Spieler, Welt, etc.)
+- Die Game-Loop (Hauptschleife: Events → Update → Zeichnen)
+- Steuerung (Tastatur, Maus)
+- Dimensions-Wechsel (Reisen zwischen Welten)
+- Speichern und Laden
+
+Die Game-Loop läuft 60 Mal pro Sekunde (FPS = 60) und macht immer
+dasselbe:
+1. Events verarbeiten (Tastendrücke, Mausklicks)
+2. Spiel-Zustand aktualisieren (Bewegung, Kollision, Gegner)
+3. Alles auf den Bildschirm zeichnen
+
+Starte das Spiel mit: python main.py
+"""
+
 import pygame
 import sys
 import os
 import random
 
+# Audio-Treiber auf "dummy" setzen, damit keine Sound-Fehler auftreten,
+# falls keine Soundkarte vorhanden ist.
 os.environ['SDL_AUDIODRIVER'] = 'dummy'
 
 from utils.constants import (
@@ -18,8 +40,42 @@ from utils.portal import PortalSystem, DimensionalRift
 from utils.mob import MobManager
 from utils.save_system import SaveSystem
 
+
 class Game:
+    """
+    Die Hauptklasse des Spiels. Steuert alles.
+    
+    Wichtige Attribute:
+        screen:             Das pygame-Fenster (1200x800 Pixel)
+        clock:              Die Spiel-Uhr (für konstante FPS)
+        asset_loader:       Lädt alle Grafiken
+        save_system:        Speichert und lädt Spielstände
+        world:              Die aktuelle Welt (World-Objekt)
+        player:             Der Spieler (Player-Objekt)
+        inventory:          Das Inventar (Inventory-Objekt)
+        crafting:           Das Crafting-System
+        portal_system:      Die Portal-Verwaltung
+        dimensional_rift:   Der Dimensions-Riss (Ende-Szene)
+        mob_manager:        Die Gegner-Verwaltung
+        current_dimension:  Name der aktuellen Dimension (z.B. "grassland")
+        visited_dimensions: Set aller bereits besuchten Dimensionen
+        dimension_cache:    Dictionary mit allen besuchten Welten (für schnellen Wechsel)
+        game_state:         "playing" oder "game_over"
+        paused:             Ist das Spiel pausiert?
+    """
+    
     def __init__(self):
+        """
+        Initialisiert das gesamte Spiel.
+        
+        Erzeugt:
+        - Das pygame-Fenster
+        - Die Grafik-Ladestation (AssetLoader)
+        - Die Startwelt (Grassland)
+        - Den Spieler, das Inventar, das Crafting-System
+        - Die Portal-Verwaltung und die Gegner
+        - Starter-Gegenstände (Holz-Spitzhacke, Axt, Schwert, Äpfel, Holz)
+        """
         pygame.init()
         pygame.key.set_repeat(0)
         pygame.display.set_caption("2D Minecraft - Dimensional Adventure")
@@ -354,10 +410,13 @@ class Game:
         
         if target_dimension in DIMENSIONS:
             # Zuerst den aktuellen Weltzustand im Cache sichern, bevor gewechselt wird
+            # Inklusive der letzten Spieler-Position in dieser Welt
             self.dimension_cache[self.current_dimension] = {
                 "world": self.world.get_save_data(),
                 "portals": self.portal_system.get_save_data(),
-                "mobs": self.mob_manager.get_save_data()
+                "mobs": self.mob_manager.get_save_data(),
+                "player_x": self.player.x,
+                "player_y": self.player.y
             }
             
             self.current_dimension = target_dimension
@@ -366,19 +425,25 @@ class Game:
             # Wenn die Zielwelt bereits im Cache vorhanden ist, aus dem Cache wiederherstellen
             if target_dimension in self.dimension_cache:
                 cached = self.dimension_cache[target_dimension]
-                self.world = World(target_dimension)
+                # skip_generation=True, da load_save_data() direkt danach alles überschreibt
+                self.world = World(target_dimension, skip_generation=True)
                 self.world.load_save_data(cached.get("world", {}))
                 self.portal_system.load_save_data(cached.get("portals", {}))
                 self.mob_manager.load_save_data(cached.get("mobs", []))
+                
+                # Spieler an die letzte Position in dieser Welt setzen (statt Spawn-Punkt)
+                self.player.x = cached.get("player_x", self.world.spawn_point[0])
+                self.player.y = cached.get("player_y", self.world.spawn_point[1])
             else:
                 # Erster Besuch: Welt komplett frisch generieren
                 self.world = World(target_dimension)
                 self.mob_manager.clear_mobs()
                 self.portal_system.active_portals.clear()
+                
+                # Erster Besuch: Spieler an den Spawn-Punkt setzen
+                self.player.x = self.world.spawn_point[0]
+                self.player.y = self.world.spawn_point[1]
             
-            # Spieler an den Spawn-Punkt der Welt setzen
-            self.player.x = self.world.spawn_point[0]
-            self.player.y = self.world.spawn_point[1]
             self.player.velocity_x = 0
             self.player.velocity_y = 0
             self.show_message(f"Welcome to {DIMENSIONS[target_dimension]['name']}!")

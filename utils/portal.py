@@ -1,8 +1,39 @@
+"""
+utils/portal.py – Portal-System und Dimensions-Riss
+
+Dieses Modul enthält zwei Klassen:
+- PortalSystem: Verwaltet Portale zwischen den Dimensionen.
+  Ein Portal wird gebaut, indem man portal_frame-Blöcke in einem
+  3×4-Rechteck platziert und dann mit dem richtigen Schlüssel aktiviert.
+- DimensionalRift: Ein besonderes Ereignis, das ausgelöst wird,
+  wenn alle 5 Dimensionen besucht wurden.
+
+Portale sind der einzige Weg, um zwischen den Welten zu reisen.
+Jede Dimension hat ihren eigenen Portalrahmen und benötigt einen
+speziellen Schlüssel zur Aktivierung.
+"""
+
 import pygame
 from utils.constants import TILE_SIZE, DIMENSIONS, BLOCK_PROPERTIES
 
+
 class PortalSystem:
+    """
+    Verwaltet Portale zwischen den Dimensionen.
+    
+    Wichtige Attribute:
+        portal_frames:   Liste aller platzierten Portal-Rahmen
+        active_portals:  Liste aller aktivierten Portale
+        animation_frame: Aktuelles Animations-Bild (für den Portal-Effekt)
+        animation_timer: Zählt die Zeit für die Animation
+    
+    Ein Portal besteht aus einem 3 Blöcke breiten und 4 Blöcke hohen Rahmen.
+    Wenn aktiviert, wird die Mitte mit "portal"-Blöcken gefüllt.
+    Der Spieler kann durch ein aktives Portal gehen, um die Dimension zu wechseln.
+    """
+    
     def __init__(self):
+        """Initialisiert das Portal-System."""
         self.portal_frames = []
         self.active_portals = []
         self.animation_frame = 0
@@ -130,7 +161,20 @@ class PortalSystem:
 
 
 class DimensionalRift:
+    """
+    Der Dimensions-Riss – ein spezielles Ereignis am Ende des Spiels.
+    
+    Wenn der Spieler alle 5 Dimensionen besucht hat, wird der Riss aktiviert.
+    Er zeigt eine Animation und soll später in eine 3D-Welt führen.
+    
+    Wichtige Attribute:
+        is_active:       Ist der Riss gerade aktiv?
+        animation_progress: Fortschritt der Animation (0.0 bis 5.0 Sekunden)
+        rift_triggered:  Wurde der Riss bereits ausgelöst?
+    """
+    
     def __init__(self):
+        """Initialisiert den Dimensions-Riss (startet inaktiv)."""
         self.is_active = False
         self.animation_progress = 0
         self.completed_dimensions = set()
