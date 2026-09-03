@@ -1,9 +1,9 @@
 [project]
-name = "repl-nix-workspace"
-version = "0.1.0"
-description = "Add your description here"
+name = "pixelportalrift"
+version = "0.2.0"
+description = "PixelPortalRift - 3D-Voxel-Adventure mit Ursina (Migration von Pygame 2D)"
 requires-python = ">=3.11"
 dependencies = [
+    "ursina>=8.0.0",
     "pillow>=12.0.0",
-    "pygame>=2.6.1",
 ]

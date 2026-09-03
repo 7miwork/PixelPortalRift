@@ -111,7 +111,7 @@ class Mob:
             # Rumstehen: Nach 2 Sekunden vielleicht umherlaufen
             if self.ai_timer > 2000:
                 self.ai_timer = 0
-                if random.random() < 0.5:
+                if random.random() < 0.5: 
                     self.ai_state = "wander"
         
         elif self.ai_state == "wander":

@@ -19,7 +19,7 @@ Wenn du einen neuen Block, ein neues Item, einen neuen Gegner oder ein neues
 Rezept hinzufügen willst, musst du hier die entsprechenden Einträge ergänzen.
 """
 
-import pygame
+import math
 
 # =========================================================
 # BILDSCHIRM-EINSTELLUNGEN
@@ -67,6 +67,37 @@ PINK = (255, 192, 203)
 # =========================================================
 WORLD_WIDTH = 200   # Die Welt ist 200 Blöcke breit
 WORLD_HEIGHT = 100  # Die Welt ist 100 Blöcke hoch
+
+# =========================================================
+# 3D-WELT-EINSTELLUNGEN (Ursina-Voxelwelt)
+# =========================================================
+# Seit der 3D-Migration ist die Welt ein echtes Voxel-Gitter:
+#   X und Z sind die horizontale Grundfläche (wie Minecraft),
+#   Y ist die Höhe (Y wächst nach oben).
+# Die alten 2D-Werte WORLD_WIDTH/WORLD_HEIGHT bleiben als
+# horizontale Ausdehnung erhalten; WORLD_DEPTH gibt die Tiefe
+# unter der Oberfläche an (Anzahl Blockschichten nach unten).
+WORLD_DEPTH = 32                    # Wie viele Blockschichten gibt es unter dem höchsten Punkt?
+CHUNK_SIZE = 16                     # Ein Chunk ist 16×16 Blöcke Grundfläche (X/Z)
+RENDER_DISTANCE_CHUNKS = 3          # Wie viele Chunks um den Spieler herum gerendert werden
+CHUNK_HEIGHT = WORLD_HEIGHT         # Maximale Höhe eines Chunks (in Blöcken)
+
+# Höhe der flachen Oberfläche des Testchunks (Phase 1 – Grundgerüst):
+# 3 Schichten: Stein (unten), Erde (Mitte), Gras (oben)
+TEST_CHUNK_STONE_LAYERS = 2         # Anzahl Stein-Schichten im Testchunk
+TEST_CHUNK_SURFACE_Y = 4            # Y-Höhe der obersten (Gras-)Schicht
+
+# =========================================================
+# 3D-SPIELER-EINSTELLUNGEN
+# =========================================================
+# Die alten 2D-Werte (speed=4, jump_power=12, gravity=0.5) waren auf
+# Pixel pro Frame ausgelegt. Für die 3D-Welt gibt es eigene, auf
+# Block-Einheiten basierende Werte (wie in Minecraft):
+PLAYER_SPEED_3D = 6                 # Laufgeschwindigkeit (Blöcke pro Sekunde)
+PLAYER_JUMP_HEIGHT_3D = 2           # Sprunghöhe in Blöcken (2 Blöcke hoch springen)
+PLAYER_GRAVITY_3D = 30              # Schwerkraft (Blöcke pro Sekunde²)
+PLAYER_SPRINT_FACTOR_3D = 1.6       # Sprint-Multiplikator (Shift halten)
+PLAYER_HEIGHT_3D = 2                # Körpergröße des Spielers in Blöcken
 
 # =========================================================
 # DIMENSIONEN (Welten)
