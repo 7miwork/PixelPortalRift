@@ -21,7 +21,6 @@ from ursina.prefabs.first_person_controller import FirstPersonController
 
 from utils.constants import (
     DIMENSIONS,
-    TEST_CHUNK_SURFACE_Y,
     PLAYER_SPEED_3D,
     PLAYER_JUMP_HEIGHT_3D,
     PLAYER_GRAVITY_3D,
@@ -64,14 +63,12 @@ class Game:
         DirectionalLight(y=10, z=-10, shadows=False, rotation=(45, -45, 0))
         AmbientLight(color=color.rgba(0.6, 0.6, 0.6, 1))
 
-        # ---- Welt: PHASE 1 = flacher Testchunk ----
+        # ---- Welt: chunkweise 3D-Terrain-Generierung ----
         self.world = VoxelWorld(BlockTextureLibrary())
-        self.world.generate_flat_test_chunk(cx=0, cz=0)
+        spawn = self.world.generate_dimension()
 
         # ---- Spieler: FirstPersonController aus dem Ursina-Prefab ----
-        # Spawn in der Mitte des Testchunks, oberhalb der Oberfläche.
-        spawn_x, spawn_z = 8, 8
-        spawn_y = TEST_CHUNK_SURFACE_Y + 3
+        spawn_x, spawn_y, spawn_z = spawn
         self.player = FirstPersonController(
             position=(spawn_x, spawn_y, spawn_z),
             speed=PLAYER_SPEED_3D,

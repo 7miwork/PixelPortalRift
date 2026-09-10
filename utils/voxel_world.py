@@ -28,10 +28,12 @@ import os
 from ursina import Entity, Texture, color
 from utils.constants import (
     CHUNK_SIZE,
+    RENDER_DISTANCE_CHUNKS,
     TEST_CHUNK_STONE_LAYERS,
     TEST_CHUNK_SURFACE_Y,
     BLOCK_PROPERTIES,
 )
+from utils.world_gen import World
 
 
 class BlockTextureLibrary:
@@ -196,11 +198,12 @@ class VoxelWorld:
     PHASE 1: Erzeugt einen flachen Testchunk (Gras/Erde/Stein).
     """
 
-    def __init__(self, texture_library=None):
+    def __init__(self, texture_library=None, dimension="grassland", seed=None):
         # Parent-Entity für alle Chunks (kann als Ganzes versteckt/entladen werden)
         self.world_group = Entity(name="VoxelWorld")
         self.texture_library = texture_library or BlockTextureLibrary()
         self.chunks = {}  # (cx, cz) → Chunk
+        self.data = World(dimension=dimension, seed=seed, skip_generation=True)
 
     # =========================================================
     # CHUNK-VERWALTUNG
@@ -224,19 +227,31 @@ class VoxelWorld:
             chunk.clear()
         self.chunks = {}
 
+    def generate_dimension(self, center_x=None, center_z=None, radius=RENDER_DISTANCE_CHUNKS):
+        """Generiert und rendert die Chunks um einen Weltpunkt herum."""
+        center_x = self.data.width // 2 if center_x is None else center_x
+        center_z = self.data.depth // 2 if center_z is None else center_z
+        wanted = set(self.data.chunk_range_for_player(center_x, center_z, radius))
+        self.data.generate_chunks(wanted)
+        for chunk_coords in wanted:
+            if chunk_coords in self.chunks:
+                continue
+            chunk = Chunk(*chunk_coords, self.texture_library, self.world_group)
+            for x, y, z, block in self.data.get_chunk_blocks(*chunk_coords):
+                chunk.set_block(x, y, z, block)
+            self.add_chunk(chunk)
+        return self.data.spawn_point
+
     # =========================================================
     # BLOCK-ZUGRIFF (weltweit, über Chunk-Grenzen hinweg)
     # =========================================================
     def get_block(self, x, y, z):
         """Gibt den Block an Welt-Position (x, y, z) zurück (oder None = Luft)."""
-        cx, cz = self.get_chunk_coords(x, z)
-        chunk = self.get_chunk(cx, cz)
-        if chunk is None:
-            return None
-        return chunk.get_block(x, y, z)
+        return self.data.get_block(x, y, z)
 
     def set_block(self, x, y, z, block):
         """Setzt einen Block an Welt-Position (x, y, z)."""
+        self.data.set_block(x, y, z, block)
         cx, cz = self.get_chunk_coords(x, z)
         chunk = self.get_chunk(cx, cz)
         if chunk is not None:
@@ -244,10 +259,7 @@ class VoxelWorld:
 
     def is_solid(self, x, y, z):
         """Prüft, ob an Welt-Position (x, y, z) ein fester Block ist."""
-        block = self.get_block(x, y, z)
-        if block is None:
-            return False
-        return BLOCK_PROPERTIES.get(block, {}).get("solid", True)
+        return self.data.is_solid(x, y, z)
 
     # =========================================================
     # PHASE 1: FLACHER TESTCHUNK
