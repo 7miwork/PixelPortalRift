@@ -8,6 +8,8 @@ from utils.constants import (
     CHUNK_HEIGHT,
     CHUNK_SIZE,
     DIMENSIONS,
+    TILE_SIZE,
+    WORLD_DEPTH,
     WORLD_HEIGHT,
     WORLD_WIDTH,
 )
@@ -22,7 +24,7 @@ class World:
         self.dimension = dimension
         self.seed = seed if seed is not None else random.randrange(1_000_000)
         self.width = WORLD_WIDTH
-        self.depth = WORLD_WIDTH
+        self.depth = WORLD_DEPTH
         self.height = min(CHUNK_HEIGHT, WORLD_HEIGHT)
         self.dimension_data = DIMENSIONS[dimension]
         self.blocks = {}
@@ -33,6 +35,96 @@ class World:
         if not skip_generation:
             center = self.chunk_coords(self.width // 2, self.depth // 2)
             self.generate_chunk(*center)
+
+    def generate(self):
+        """Generiert die gesamte Welt.
+
+        Berechnet zuerst eine 2D-Höhenkarte mit numpy (sin/cos + Rauschen)
+        und generiert dann alle Chunks der Reihe nach.
+        Der Spawn-Point wird in die Mitte der Welt gesetzt.
+        """
+        import numpy as np
+
+        W = self.width
+        D = self.depth
+        H = self.height
+        base = self.dimension_data["ground_level"]
+
+        xs = np.arange(W)
+        zs = np.arange(D)
+        xx, zz = np.meshgrid(xs, zs, indexing="ij")
+
+        # 2D-Höhenkarte: Sinus/Cosinus-Schwankungen + Rauschen
+        wave = np.sin(xx * 0.05) * 5.0 + np.cos(zz * 0.04) * 5.0
+        broad = np.sin((xx + zz) * 0.018) * 6.0
+
+        rng = np.random.RandomState(self.seed)
+        noise = (rng.normal(scale=1.5, size=(W, D)) -
+                 rng.normal(scale=1.0, size=(W, D)) * 0.5)
+
+        heights = np.clip(base + wave + broad + noise, 3, H - 5).astype(int)
+
+        # Alten Weltzustand zur Sicherheit loeschen, bevor wir neu bauen
+        self.blocks.clear()
+        self.generated_chunks.clear()
+        self.respawn_queue.clear()
+        self.portals.clear()
+
+        # Alle Chunks der Reihe nach generieren
+        cx_max = (W + CHUNK_SIZE - 1) // CHUNK_SIZE
+        cz_max = (D + CHUNK_SIZE - 1) // CHUNK_SIZE
+        for cx in range(cx_max):
+            for cz in range(cz_max):
+                self._generate_chunk(cx, cz, heights)
+
+        # Spawn-Point an die Weltmitte / Höhe der Oberfläche dort
+        spawn_x = W // 2
+        spawn_z = D // 2
+        self.spawn_point = (
+            spawn_x + 0.5,
+            int(heights[spawn_x, spawn_z]) + 2,
+            spawn_z + 0.5,
+        )
+
+        self._heightmap = heights
+
+    def _generate_chunk(self, cx, cz, heights=None):
+        """Erzeugt einen Chunk (cx, cz) anhand einer Hoehenkarte.
+
+        Falls `heights` bereitgestellt wird, werden die dort gespeicherten
+        Hoehenwerte verwendet. Ansonsten wird eine Hoehe pro Spalte auf der
+        Basis der aktuellen Dimension berechnet (natuerlich unvollstaendig,
+        das sollte nie passieren, wenn ``generate()`` stattdessen genutzt wird).
+        """
+        x_start = max(0, cx * CHUNK_SIZE)
+        z_start = max(0, cz * CHUNK_SIZE)
+        x_end = min(self.width, x_start + CHUNK_SIZE)
+        z_end = min(self.depth, z_start + CHUNK_SIZE)
+
+        surface_height = math.ceil(self.dimension_data.get("ground_level", 20))
+
+        for x in range(x_start, x_end):
+            for z in range(z_start, z_end):
+                if heights is not None:
+                    surface = int(heights[x, z])
+                else:
+                    surface = self._height_at(x, z)
+
+                if surface < 0:
+                    surface = 0
+
+                # Untergrund-Bloecke bis zur Oberfläche
+                for y in range(surface + 1):
+                    if self._is_cave(x, y, z, surface):
+                        continue
+                    block = self._block_for_height(surface, y, x, z)
+                    if block:
+                        self.set_block(x, y, z, block)
+
+                self._place_ores(x, z, surface)
+                self._place_tree(x, z, surface)
+
+        self.generated_chunks.add((cx, cz))
 
     @staticmethod
     def chunk_coords(x, z):
@@ -48,6 +140,56 @@ class World:
             and 0 <= center_z + dz < math.ceil(self.depth / CHUNK_SIZE)
         ]
 
+
+    def _place_ores(self, x, z, surface_y):
+        """Platziert Erze / Mineralien an und unter der Oberfläche."""
+        below = self.get_block(x, surface_y - 1, z)
+        bl = self.dimension_data.get("blocks", [])
+        ores = [b for b in bl if "ore" in b]
+        # Flaechennahe Erze: pro Spalte ca. 1-2 Vorkommen
+        n = random.randint(1, 2)
+        for _ in range(n):
+            ore = random.choice(ores) if ores else None
+            if not ore:
+                return
+            y = surface_y - random.randint(2, 8)
+            if y >= 2 and y < self.height:
+                self.set_block(x, y, z, ore)
+
+    def _place_trees(self, x, z, surface_y):
+        """Platziert gelegentlich einen Baum an der Oberfläche."""
+        ground = self.get_block(x, surface_y - 1, z)
+        if ground not in ("grass", "dirt", "sand"):
+            return
+        if random.random() > 0.008:
+            return
+        self._grow_tree(x, surface_y + 1, z)
+        # Tiefliegende Erze (Diamond/Gold/Iron) mit niedriger Chance
+
+    def _block_for_height(self, surface_y, y, x, z):
+        """Gibt den Blocktyp fuer Koordinate (x,y,z) zurueck, relativ zur Oberflaeche."""
+        if y > surface_y:
+            return None
+        if y == surface_y:
+            return self.get_surface_block()
+        if y >= surface_y - 3:
+            return self.get_subsurface_block()
+        if y <= VOID_Y:
+            return None
+        return self._underground_block(x, y, z)
+        if random.random() < 0.15:
+            deep_ores = []
+            if "diamond_ore" in BLOCK_PROPERTIES:
+                deep_ores.append("diamond_ore")
+            if "gold_ore" in BLOCK_PROPERTIES:
+                deep_ores.append("gold_ore")
+            if "iron_ore" in BLOCK_PROPERTIES:
+                deep_ores.append("iron_ore")
+            if deep_ores:
+                ore = random.choice(deep_ores)
+                y = surface_y - random.randint(12, 25)
+                if y >= 2 and y < self.height:
+                    self.set_block(x, y, z, ore)
     def _hash(self, x, z, salt=0):
         value = x * 374761393 + z * 668265263 + self.seed * 1442695041 + salt * 1013904223
         value = (value ^ (value >> 13)) * 1274126177
@@ -63,6 +205,16 @@ class World:
     def get_surface_block(self):
         return {
             "grassland": "grass", "stone_world": "stone", "water_world": "sand",
+    def _place_tree(self, x, z, surface_y):
+        """Baum-Vorbereitung fuer Spalte (x,z) mit Oberflaeche surface_y."""
+        if surface_y < 1:
+            return
+        ground = self.blocks.get((x, surface_y - 1, z))
+        if ground not in ("grass", "dirt", "sand"):
+            return
+        if self._hash(x + 77, z + 13, 17) < 0.45:
+            return
+        self._generate_tree(x, surface_y + 1, z)
             "gem_world": "crystal", "nuclear_world": "contaminated_stone",
         }.get(self.dimension, "grass")
 
@@ -201,4 +353,5 @@ class World:
         self.generated_chunks = {tuple(chunk) for chunk in data.get("generated_chunks", []) if len(chunk) == 2}
         self.spawn_point = tuple(data["spawn_point"]) if data.get("spawn_point") else None
         self.portals = data.get("portals", [])
+        self._heightmap = None
         self.respawn_queue = data.get("respawn_queue", [])
