@@ -203,6 +203,9 @@ class VoxelWorld:
         self.world_group = Entity(name="VoxelWorld")
         self.texture_library = texture_library or BlockTextureLibrary()
         self.chunks = {}  # (cx, cz) → Chunk
+        # Nur die sichtbare Startregion wird erzeugt; die komplette Welt wird nicht
+        # beim Start mit Millionen Blöcken geladen, da das zu einem schwarzen oder
+        # unbearbeitbaren Startbild führen kann.
         self.data = World(dimension=dimension, seed=seed, skip_generation=True)
 
     # =========================================================
@@ -228,11 +231,15 @@ class VoxelWorld:
         self.chunks = {}
 
     def generate_dimension(self, center_x=None, center_z=None, radius=RENDER_DISTANCE_CHUNKS):
-        """Generiert und rendert die Chunks um einen Weltpunkt herum."""
+        """Generiert und rendert nur die sichtbare Startregion der Dimension."""
         center_x = self.data.width // 2 if center_x is None else center_x
         center_z = self.data.depth // 2 if center_z is None else center_z
         wanted = set(self.data.chunk_range_for_player(center_x, center_z, radius))
+
+        # Die Welt wird lokal erzeugt, damit beim Spielstart ein sichtbares Terrain
+        # entsteht, statt die komplette Welt erst im Hintergrund aufzubauen.
         self.data.generate_chunks(wanted)
+
         for chunk_coords in wanted:
             if chunk_coords in self.chunks:
                 continue
@@ -240,6 +247,10 @@ class VoxelWorld:
             for x, y, z, block in self.data.get_chunk_blocks(*chunk_coords):
                 chunk.set_block(x, y, z, block)
             self.add_chunk(chunk)
+
+        if self.data.spawn_point is None:
+            surface_y = self.data.terrain_height(center_x, center_z)
+            self.data.spawn_point = (center_x + 0.5, surface_y + 2, center_z + 0.5)
         return self.data.spawn_point
 
     # =========================================================

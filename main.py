@@ -70,7 +70,7 @@ class Game:
         # ---- Spieler: FirstPersonController aus dem Ursina-Prefab ----
         spawn_x, spawn_y, spawn_z = spawn
         self.player = FirstPersonController(
-            position=(spawn_x, spawn_y, spawn_z),
+            position=(spawn_x, spawn_y + 1.8, spawn_z),
             speed=PLAYER_SPEED_3D,
             jump_height=PLAYER_JUMP_HEIGHT_3D,
         )
