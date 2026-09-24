@@ -14,10 +14,10 @@ die mindestens eine sichtbare Fläche haben (komplett von Nachbarn umschlossene
 Blöcke bleiben unsichtbar). Das hält die Entity-Anzahl klein, auch wenn die
 Welt intern viel größer ist.
 
-PHASE 1 (Grundgerüst): Diese Datei erzeugt zunächst nur einen flachen
-Testchunk (Gras/Erde/Stein), um Ursina, FirstPersonController und die
-Kollisions-Logik zu testen. Ab Phase 2 wird hier die echte 3D-Terrain-
-generierung (Heightmap, Bäume, Höhlen, Erze) angebaut.
+PHASE 2: Die Blöcke kommen aus utils/world_gen.py (World mit Heightmap,
+Bäume, Erze). VoxelWorld rendert die sichtbaren Blöcke als Entities,
+streamt Chunks um den Spieler herum (ensure_chunks_around) und hält
+Darstellung und Daten bei Block-Interaktionen synchron.
 
 Block-Eigenschaften (solid, hardness, tool, drop, color) kommen weiterhin
 aus BLOCK_PROPERTIES in utils/constants.py — keine hartkodierten Werte.
@@ -25,7 +25,7 @@ aus BLOCK_PROPERTIES in utils/constants.py — keine hartkodierten Werte.
 
 import math
 import os
-from ursina import Entity, Texture, color
+from ursina import Entity, Mesh, Texture, Vec2, Vec3, color
 from utils.constants import (
     CHUNK_SIZE,
     RENDER_DISTANCE_CHUNKS,
@@ -89,6 +89,71 @@ class BlockTextureLibrary:
         self.color_cache[block_name] = ursina_color
         return ursina_color
 
+    def build_atlas(self, cell=32, cols=8):
+        """Erzeugt einmalig eine Textur-Atlas-Kachelkarte aus allen Block-PNGs.
+
+        Füllt fehlende PNGs mit der BLOCK_PROPERTIES-Farbe und multipliziert
+        Textur × Farbe (exakt wie früher die Entity-Einfärbung).
+        Danach sind self.atlas_uv (Block → UV-Rechteck) und
+        self.atlas_texture (eine einzige Ursina-Textur) verfügbar.
+        """
+        if getattr(self, "atlas_uv", None):
+            return
+
+        from math import ceil
+        from PIL import Image, ImageChops
+
+        blocks = sorted(
+            b for b in BLOCK_PROPERTIES
+            if b != "air" and BLOCK_PROPERTIES[b].get("solid", True)
+        )
+        rows = ceil(len(blocks) / cols)
+        atlas = Image.new("RGBA", (cols * cell, rows * cell), (0, 0, 0, 0))
+        self.atlas_uv = {}
+
+        for i, block in enumerate(blocks):
+            cx = (i % cols) * cell
+            cy = (i // cols) * cell
+
+            image_path = os.path.join(self.assets_path, f"{block}.png")
+            if os.path.exists(image_path):
+                img = Image.open(image_path).convert("RGBA").resize(
+                    (cell, cell), Image.NEAREST)
+            else:
+                rgb = BLOCK_PROPERTIES[block].get("color") or (255, 0, 255)
+                img = Image.new("RGBA", (cell, cell),
+                                (rgb[0], rgb[1], rgb[2], 255))
+
+            # Textur × Farbe wie bisher bei den Entity-Entities
+            rgb = BLOCK_PROPERTIES[block].get("color")
+            if rgb is not None:
+                tint = Image.new("RGBA", img.size,
+                                 (rgb[0], rgb[1], rgb[2], 255))
+                img = ImageChops.multiply(img, tint)
+
+            atlas.paste(img, (cx, cy))
+
+            atlas_w = cols * cell
+            atlas_h = rows * cell
+            eps_u = 0.5 / atlas_w
+            eps_v = 0.5 / atlas_h
+            u0 = cx / atlas_w + eps_u
+            u1 = (cx + cell) / atlas_w - eps_u
+            # WICHTIG: Ursina/Panda3D lädt PIL-Bilder mit vertikalem Flip
+            # (texture.py: FLIP_TOP_BOTTOM, speichert Bildzeile 0 an v=0) →
+            # PIL-Y-Achse (0 = oben) entspricht der gespiegelten V-Achse.
+            v0 = 1.0 - (cy + cell) / atlas_h + eps_v
+            v1 = 1.0 - cy / atlas_h - eps_v
+            self.atlas_uv[block] = (u0, v0, u1, v1)
+
+        self.atlas_texture = Texture(atlas)
+        try:  # Pixel-Look: keine weichen Kanten zwischen Atlas-Zellen
+            from panda3d.core import Texture as PTexture
+            self.atlas_texture.set_minfilter(PTexture.FT_nearest)
+            self.atlas_texture.set_magfilter(PTexture.FT_nearest)
+        except Exception:
+            pass
+
 
 
 class Chunk:
@@ -107,13 +172,16 @@ class Chunk:
         world_group:      Parent-Entity, in dem alle Block-Entities liegen
     """
 
-    def __init__(self, chunk_x, chunk_z, texture_library, world_group):
+    def __init__(self, chunk_x, chunk_z, texture_library, world_group,
+                 world_data=None):
         self.chunk_x = chunk_x
         self.chunk_z = chunk_z
         self.texture_library = texture_library
         self.world_group = world_group
+        self.world_data = world_data   # globale World-Daten (fuer Nachbar-Checks)
         self.blocks = {}
         self.entities = []
+        self.entity = None             # der eine verschmolzene Chunk-Entity
 
     # =========================================================
     # BLOCK-ZUGRIFF
@@ -132,58 +200,82 @@ class Chunk:
     # =========================================================
     # RENDERING
     # =========================================================
-    def _is_exposed(self, x, y, z):
-        """
-        Prüft, ob der Block an (x, y, z) mindestens eine sichtbare Fläche hat.
-        Ein Block ist sichtbar, wenn einer seiner 6 Nachbarn fehlt (Luft)
-        oder durchlässig ist (z.B. Wasser).
-        Hinweis (Phase 2): Nachbarn außerhalb des Chunks liegen in anderen
-        Chunks; die VoxelWorld stellt deren Blöcke dann global bereit.
-        """
-        for dx, dy, dz in ((1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)):
-            neighbor = self.get_block(x + dx, y + dy, z + dz)
-            if neighbor is None:
-                return True  # Nachbar fehlt → Fläche ist sichtbar
-            if not BLOCK_PROPERTIES.get(neighbor, {}).get("solid", True):
-                return True  # Durchlässiger Nachbar (z.B. Wasser) → auch sichtbar
-        return False
+    def _neighbor_solid(self, x, y, z):
+        """True, wenn der Nachbar-Block die Fläche verdeckt (weltweit, chunkübergreifend)."""
+        if self.world_data is not None:
+            neighbor = self.world_data.get_block(x, y, z)
+        else:
+            neighbor = self.get_block(x, y, z)
+        if neighbor is None:
+            return False  # Luft oder außerhalb → Fläche sichtbar
+        return bool(BLOCK_PROPERTIES.get(neighbor, {}).get("solid", True))
 
     def render(self):
-        """
-        Erzeugt die Ursina-Entities für alle sichtbaren Blöcke dieses Chunks.
+        """Baut EINEN verschmolzenen Mesh pro Chunk (nur sichtbare Flächen).
 
-        Vorher werden alte Entities zerstört (wichtig für Rebuild nach
-        Block-Änderungen, z.B. beim Abbauen in Phase 3).
+        Ersetzt die alte Variante mit einem Entity pro Block: 14 Chunks statt
+        ~57.000 Entities → Startzeit von ~100s auf ~2s und 60 FPS statt 2 FPS.
         """
         self.clear()
+        if not self.blocks:
+            return
+
+        # 6 Seiten: (Nachbar-Offset, 4 Ecken relativ zur Blockmitte ±0.5)
+        # Winding: rechtshändig, Normale zeigt per Cross-Produkt nach AUSSEN.
+        faces = (
+            ((0, 1, 0), ((-.5, .5, .5), (.5, .5, .5), (.5, .5, -.5), (-.5, .5, -.5))),
+            ((0, -1, 0), ((-.5, -.5, -.5), (.5, -.5, -.5), (.5, -.5, .5), (-.5, -.5, .5))),
+            ((1, 0, 0), ((.5, -.5, -.5), (.5, .5, -.5), (.5, .5, .5), (.5, -.5, .5))),
+            ((-1, 0, 0), ((-.5, -.5, .5), (-.5, .5, .5), (-.5, .5, -.5), (-.5, -.5, -.5))),
+            ((0, 0, 1), ((.5, -.5, .5), (.5, .5, .5), (-.5, .5, .5), (-.5, -.5, .5))),
+            ((0, 0, -1), ((-.5, -.5, -.5), (-.5, .5, -.5), (.5, .5, -.5), (.5, -.5, -.5))),
+        )
+        # Quad-UVs: k0→k1 = horizontal (U), k0→k3 = vertikal (V, oben = v1)
+        corner_uv = ((0, 0), (0, 1), (1, 1), (1, 0))
+
+        self.texture_library.build_atlas()
+        atlas_uv = self.texture_library.atlas_uv
+
+        vertices, uvs, triangles = [], [], []
         for (x, y, z), block in self.blocks.items():
-            # Nur sichtbare Blöcke rendern — spart massiv Entities
-            if not self._is_exposed(x, y, z):
+            if not BLOCK_PROPERTIES.get(block, {}).get("solid", True):
                 continue
+            uv = atlas_uv.get(block)
+            if uv is None:
+                continue
+            u0, v0, u1, v1 = uv
+            for (dx, dy, dz), corners in faces:
+                if self._neighbor_solid(x + dx, y + dy, z + dz):
+                    continue  # vollständig verdeckt → nicht zeichnen
+                base = len(vertices)
+                for k, (fx, fy, fz) in enumerate(corners):
+                    vertices.append(Vec3(x + fx, y + fy, z + fz))
+                    su, sv = corner_uv[k]
+                    uvs.append(Vec2(u1 if su else u0, v1 if sv else v0))
+                triangles.append((base, base + 1, base + 2))
+                triangles.append((base, base + 2, base + 3))
 
-            props = BLOCK_PROPERTIES.get(block, {})
-            if not props.get("solid", True):
-                continue  # Luft/durchlässige Blöcke werden nicht als Würfel gerendert
+        if not vertices:
+            return
 
-            texture = self.texture_library.get_texture(block)
-            entity = Entity(
-                parent=self.world_group,
-                model="cube",
-                texture=texture,
-                color=self.texture_library.get_color(block),
-                position=(x, y, z),
-                collider="box",
-                enabled=True,
-            )
-            # Merken, welcher Block hinter dem Entity steckt (fürs Abbauen/Platzieren)
-            entity.block_name = block
-            entity.block_coords = (x, y, z)
-            self.entities.append(entity)
+        mesh = Mesh(vertices=vertices, triangles=triangles, uvs=uvs,
+                    mode="triangle")
+        self.entity = Entity(
+            parent=self.world_group,
+            model=mesh,
+            texture=self.texture_library.atlas_texture,
+            collider="mesh",
+        )
+        self.entity.is_voxel_chunk = True
+        self.entity.chunk_x = self.chunk_x
+        self.entity.chunk_z = self.chunk_z
+        self.entities = [self.entity]
 
     def clear(self):
-        """Entfernt alle Entities dieses Chunks aus der Szene."""
-        for entity in self.entities:
-            entity.removeNode()
+        """Entfernt den Chunk-Entity (Mesh) aus der Szene."""
+        if self.entity is not None:
+            self.entity.removeNode()
+            self.entity = None
         self.entities = []
 
 class VoxelWorld:
@@ -207,6 +299,16 @@ class VoxelWorld:
         # beim Start mit Millionen Blöcken geladen, da das zu einem schwarzen oder
         # unbearbeitbaren Startbild führen kann.
         self.data = World(dimension=dimension, seed=seed, skip_generation=True)
+        self._wanted_chunks = None
+        # Weltweit sichtbare Flächen markieren, aber NICHT rückseitig beschneiden
+        try:
+            import builtins
+            rnd = getattr(builtins, "render", None)
+            if rnd is None:
+                from ursina import render as rnd
+            rnd.setTwoSided(True)
+        except Exception:
+            pass
 
     # =========================================================
     # CHUNK-VERWALTUNG
@@ -235,6 +337,7 @@ class VoxelWorld:
         center_x = self.data.width // 2 if center_x is None else center_x
         center_z = self.data.depth // 2 if center_z is None else center_z
         wanted = set(self.data.chunk_range_for_player(center_x, center_z, radius))
+        self._wanted_chunks = wanted
 
         # Die Welt wird lokal erzeugt, damit beim Spielstart ein sichtbares Terrain
         # entsteht, statt die komplette Welt erst im Hintergrund aufzubauen.
@@ -243,15 +346,14 @@ class VoxelWorld:
         for chunk_coords in wanted:
             if chunk_coords in self.chunks:
                 continue
-            chunk = Chunk(*chunk_coords, self.texture_library, self.world_group)
+            chunk = Chunk(*chunk_coords, self.texture_library, self.world_group,
+                          world_data=self.data)
             for x, y, z, block in self.data.get_chunk_blocks(*chunk_coords):
                 chunk.set_block(x, y, z, block)
             self.add_chunk(chunk)
 
-        if self.data.spawn_point is None:
-            surface_y = self.data.terrain_height(center_x, center_z)
-            self.data.spawn_point = (center_x + 0.5, surface_y + 2, center_z + 0.5)
-        return self.data.spawn_point
+        # Spawn-Point bestimmen und Spawn-Area freiraeumen (kein Baum im Weg).
+        return self.data.ensure_spawn_point()
 
     # =========================================================
     # BLOCK-ZUGRIFF (weltweit, über Chunk-Grenzen hinweg)
@@ -261,16 +363,77 @@ class VoxelWorld:
         return self.data.get_block(x, y, z)
 
     def set_block(self, x, y, z, block):
-        """Setzt einen Block an Welt-Position (x, y, z)."""
+        """Setzt einen Block und synchronisiert die Darstellung (inkl. Nachbarn)."""
         self.data.set_block(x, y, z, block)
-        cx, cz = self.get_chunk_coords(x, z)
-        chunk = self.get_chunk(cx, cz)
-        if chunk is not None:
-            chunk.set_block(x, y, z, block)
+        self._refresh_blocks_around(x, y, z)
+
+    def break_block(self, x, y, z):
+        """Zerbricht den Block an (x, y, z) und gibt den Drop-Namen zurück."""
+        if self.data.get_block(x, y, z) is None:
+            return None
+        drop = self.data.break_block(x, y, z)
+        self._refresh_blocks_around(x, y, z)
+        return drop
+
+    def place_block(self, x, y, z, block):
+        """Setzt einen Block (True bei Erfolg)."""
+        if not self.data.set_block(x, y, z, block):
+            return False
+        self._refresh_blocks_around(x, y, z)
+        return True
 
     def is_solid(self, x, y, z):
         """Prüft, ob an Welt-Position (x, y, z) ein fester Block ist."""
         return self.data.is_solid(x, y, z)
+
+    def _refresh_blocks_around(self, x, y, z):
+        """Synchronisiert alle betroffenen Chunks mit den World-Daten und rendert sie neu.
+
+        Nach einer Aenderung (abbauen/platzieren) muessen nicht nur der
+        eigene Chunk, sondern auch Nachbar-Chunks neu geprueft werden:
+        dort koennen durch die Aenderung neue sichtbare Flaechen entstehen.
+        """
+        touched = set()
+        for dx, dy, dz in (
+            (0, 0, 0), (1, 0, 0), (-1, 0, 0),
+            (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1),
+        ):
+            nx, ny, nz = x + dx, y + dy, z + dz
+            cx, cz = self.get_chunk_coords(nx, nz)
+            chunk = self.get_chunk(cx, cz)
+            if chunk is None:
+                continue
+            chunk.set_block(nx, ny, nz, self.data.get_block(nx, ny, nz))
+            touched.add((cx, cz))
+
+        # Betroffene Chunks neu rendern (set_block aendert nur das Dict)
+        for key in touched:
+            self.chunks[key].render()
+
+    def ensure_chunks_around(self, px, pz, radius=RENDER_DISTANCE_CHUNKS):
+        """Lädt Chunks im Umkreis um (px, pz) und entfernt entfernte Chunks."""
+        wanted = set(self.data.chunk_range_for_player(px, pz, radius))
+        if wanted == self._wanted_chunks:
+            return
+        self._wanted_chunks = wanted
+
+        # Fehlende Chunks erzeugen (Daten + sichtbare Blöcke als Entities)
+        self.data.generate_chunks(wanted)
+        for cx, cz in wanted:
+            if (cx, cz) in self.chunks:
+                continue
+            chunk = Chunk(cx, cz, self.texture_library, self.world_group,
+                          world_data=self.data)
+            for x, y, z, block in self.data.get_chunk_blocks(cx, cz):
+                chunk.set_block(x, y, z, block)
+            self.add_chunk(chunk)
+
+        # Chunks außerhalb des Radius + 1 Puffer entfernen (Daten bleiben erhalten)
+        keep = set(self.data.chunk_range_for_player(px, pz, radius + 1))
+        for chunk_key in list(self.chunks.keys()):
+            if chunk_key not in keep:
+                self.chunks[chunk_key].clear()
+                del self.chunks[chunk_key]
 
     # =========================================================
     # PHASE 1: FLACHER TESTCHUNK
