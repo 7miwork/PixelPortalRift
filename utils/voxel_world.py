@@ -25,7 +25,7 @@ aus BLOCK_PROPERTIES in utils/constants.py — keine hartkodierten Werte.
 
 import math
 import os
-from ursina import Entity, Mesh, Texture, Vec2, Vec3, color
+from ursina import Entity, Mesh, Texture, color
 from utils.constants import (
     CHUNK_SIZE,
     RENDER_DISTANCE_CHUNKS,
@@ -215,6 +215,10 @@ class Chunk:
 
         Ersetzt die alte Variante mit einem Entity pro Block: 14 Chunks statt
         ~57.000 Entities → Startzeit von ~100s auf ~2s und 60 FPS statt 2 FPS.
+
+        Nachbar-Checks laufen gegen eine lokale Solid-Menge des Chunks
+        (statt pro Fläche über world_data) — das spart bei der 1000×1000-Welt
+        mit 49 geladenen Chunks rund die Hälfte der Startzeit.
         """
         self.clear()
         if not self.blocks:
@@ -230,28 +234,47 @@ class Chunk:
             ((0, 0, 1), ((.5, -.5, .5), (.5, .5, .5), (-.5, .5, .5), (-.5, -.5, .5))),
             ((0, 0, -1), ((-.5, -.5, -.5), (-.5, .5, -.5), (.5, .5, -.5), (.5, -.5, -.5))),
         )
-        # Quad-UVs: k0→k1 = horizontal (U), k0→k3 = vertikal (V, oben = v1)
-        corner_uv = ((0, 0), (0, 1), (1, 1), (1, 0))
-
         self.texture_library.build_atlas()
         atlas_uv = self.texture_library.atlas_uv
+        props = BLOCK_PROPERTIES
 
+        # Nachbar-Checks laufen über eine lokale Solid-Menge: über world_data
+        # gingen sie pro Block 6 mal durch die Methodenkette (bei ~14.000
+        # Blöcken/Chunk sind das ~83.000 Aufrufe, davon >97 % verdeckt).
+        # world_data wird nur noch für Nachbarn ausserhalb des Chunks befragt.
+        own = self.blocks
+        solid_here = {
+            pos for pos, name in own.items()
+            if props.get(name, {}).get("solid", True)
+        }
+        x0, z0 = self.chunk_x * CHUNK_SIZE, self.chunk_z * CHUNK_SIZE
+        x1, z1 = x0 + CHUNK_SIZE, z0 + CHUNK_SIZE
+
+        # Quad-UVs: k0→k1 = horizontal (U), k0→k3 = vertikal (V, oben = v1).
+        # Die vier Ecken sind pro Block identisch → einmal vorberechnen.
         vertices, uvs, triangles = [], [], []
-        for (x, y, z), block in self.blocks.items():
-            if not BLOCK_PROPERTIES.get(block, {}).get("solid", True):
+        for (x, y, z), block in own.items():
+            if (x, y, z) not in solid_here:
                 continue
             uv = atlas_uv.get(block)
             if uv is None:
                 continue
             u0, v0, u1, v1 = uv
+            corner_uvs = ((u0, v0), (u0, v1), (u1, v1), (u1, v0))
             for (dx, dy, dz), corners in faces:
-                if self._neighbor_solid(x + dx, y + dy, z + dz):
-                    continue  # vollständig verdeckt → nicht zeichnen
+                nx, ny, nz = x + dx, y + dy, z + dz
+                if x0 <= nx < x1 and z0 <= nz < z1:
+                    if (nx, ny, nz) in solid_here:
+                        continue  # vollständig verdeckt → nicht zeichnen
+                elif self._neighbor_solid(nx, ny, nz):
+                    continue  # Nachbar in anderem Chunk → weltweiter Check
                 base = len(vertices)
-                for k, (fx, fy, fz) in enumerate(corners):
-                    vertices.append(Vec3(x + fx, y + fy, z + fz))
-                    su, sv = corner_uv[k]
-                    uvs.append(Vec2(u1 if su else u0, v1 if sv else v0))
+                # Tupel statt Vec3/Vec2: Ursina ravelt Punkte/UVs intern in
+                # float-Arrays (Mesh._ravel) und reicht die Objekte nur an den
+                # MeshCollider weiter → spart ~780.000 Objekte pro Start.
+                for fx, fy, fz in corners:
+                    vertices.append((x + fx, y + fy, z + fz))
+                uvs.extend(corner_uvs)
                 triangles.append((base, base + 1, base + 2))
                 triangles.append((base, base + 2, base + 3))
 
@@ -428,12 +451,15 @@ class VoxelWorld:
                 chunk.set_block(x, y, z, block)
             self.add_chunk(chunk)
 
-        # Chunks außerhalb des Radius + 1 Puffer entfernen (Daten bleiben erhalten)
+        # Chunks außerhalb des Radius + 1 Puffer entfernen: Render-Entity UND
+        # Blockdaten (drop_chunk). Spieler-aenderte Chunks bleiben in den
+        # Daten erhalten und werden beim Besuch nicht neu generiert.
         keep = set(self.data.chunk_range_for_player(px, pz, radius + 1))
         for chunk_key in list(self.chunks.keys()):
             if chunk_key not in keep:
                 self.chunks[chunk_key].clear()
                 del self.chunks[chunk_key]
+                self.data.drop_chunk(*chunk_key)
 
     # =========================================================
     # PHASE 1: FLACHER TESTCHUNK

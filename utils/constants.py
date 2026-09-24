@@ -65,8 +65,8 @@ PINK = (255, 192, 203)
 # =========================================================
 # WELT-GRÖSSE
 # =========================================================
-WORLD_WIDTH = 200   # Die Welt ist 200 Blöcke breit
-WORLD_HEIGHT = 100  # Die Welt ist 100 Blöcke hoch
+WORLD_WIDTH = 1000  # Horizontale Ausdehnung der Welt in X-Richtung (Blöcke)
+WORLD_HEIGHT = 100  # Die Welt ist 100 Blöcke hoch (Y-Obergrenze)
 
 # =========================================================
 # 3D-WELT-EINSTELLUNGEN (Ursina-Voxelwelt)
@@ -74,10 +74,9 @@ WORLD_HEIGHT = 100  # Die Welt ist 100 Blöcke hoch
 # Seit der 3D-Migration ist die Welt ein echtes Voxel-Gitter:
 #   X und Z sind die horizontale Grundfläche (wie Minecraft),
 #   Y ist die Höhe (Y wächst nach oben).
-# Die alten 2D-Werte WORLD_WIDTH/WORLD_HEIGHT bleiben als
-# horizontale Ausdehnung erhalten; WORLD_DEPTH gibt die Tiefe
-# unter der Oberfläche an (Anzahl Blockschichten nach unten).
-WORLD_DEPTH = 32                    # Wie viele Blockschichten gibt es unter dem höchsten Punkt?
+# WORLD_WIDTH begrenzt die X-Ausdehnung, WORLD_DEPTH die Z-Ausdehnung
+# (beide horizontal!). WORLD_HEIGHT ist die maximale Y-Höhe.
+WORLD_DEPTH = 1000                   # Horizontale Ausdehnung der Welt in Z-Richtung (Blöcke)
 CHUNK_SIZE = 16                     # Ein Chunk ist 16×16 Blöcke Grundfläche (X/Z)
 RENDER_DISTANCE_CHUNKS = 3          # Wie viele Chunks um den Spieler herum gerendert werden
 CHUNK_HEIGHT = WORLD_HEIGHT         # Maximale Höhe eines Chunks (in Blöcken)

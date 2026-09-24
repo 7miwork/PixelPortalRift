@@ -36,21 +36,31 @@ from utils.constants import (
 class World:
     """Eine Dimension als 3D-Voxelwelt (X/Z Grundflaeche, Y Hoehe)."""
 
-    def __init__(self, dimension="grassland", seed=None, skip_generation=True):
+    def __init__(self, dimension="grassland", seed=None, skip_generation=True,
+                 width=None, depth=None):
         """Erzeugt eine neue 3D-Welt. Standardmaessig wird NICHT sofort generiert
-        (lazy): VoxelWorld baut nur die sichtbaren Chunks ueber generate_chunks()."""
+        (lazy): VoxelWorld baut nur die sichtbaren Chunks ueber generate_chunks().
+        ``width``/``depth`` ueberschreiben die Weltgroesse (fuer Tests)."""
         if dimension not in DIMENSIONS:
             raise ValueError(f"Unbekannte Dimension: {dimension}")
 
         self.dimension = dimension
         self.seed = seed if seed is not None else random.randrange(1_000_000)
-        self.width = WORLD_WIDTH
-        self.depth = WORLD_DEPTH
+        self.width = WORLD_WIDTH if width is None else int(width)
+        self.depth = WORLD_DEPTH if depth is None else int(depth)
         self.height = min(CHUNK_HEIGHT, WORLD_HEIGHT)
         self.dimension_data = DIMENSIONS[dimension]
 
+        # Zwei-Ebenen-Dict: {chunk_key: {(x, y, z): block_name}}.
+        # Ermöglicht O(Chunk)-Zugriff (get_chunk_blocks) und O(1)-Entladen.
         self.blocks = {}
         self.generated_chunks = set()
+        # Chunks mit Spieler-/Spawn-/Respawn-Aenderungen: duerfen beim
+        # Entladen NICHT geloescht werden (Aenderungen muessten sonst
+        # verloren gehen).
+        self.modified_chunks = set()
+        # True waehrend _generate_chunk: interne Writes markieren nicht.
+        self._generating = False
         self.portals = []
         self.respawn_queue = []
         self.spawn_point = None
@@ -91,7 +101,10 @@ class World:
             return None
         if y < VOID_Y or y >= self.height:
             return None
-        return self.blocks.get((x, y, z))
+        sub = self.blocks.get((x // CHUNK_SIZE, z // CHUNK_SIZE))
+        if sub is None:
+            return None
+        return sub.get((x, y, z))
 
     def set_block(self, x, y, z, block_name):
         """Setzt einen Block; ``None`` oder ``'air'`` entfernt den Block."""
@@ -101,10 +114,19 @@ class World:
         if y < VOID_Y or y >= self.height:
             return False
 
+        chunk_key = (x // CHUNK_SIZE, z // CHUNK_SIZE)
+        key = (x, y, z)
         if block_name in (None, "air"):
-            self.blocks.pop((x, y, z), None)
+            sub = self.blocks.get(chunk_key)
+            if sub is not None:
+                sub.pop(key, None)
         else:
-            self.blocks[(x, y, z)] = block_name
+            self.blocks.setdefault(chunk_key, {})[key] = block_name
+
+        # Ausserhalb der Generierung = Spieler-/Spawn-/Respawn-Zugriff:
+        # Chunk vor dem Entladen schuetzen.
+        if not self._generating:
+            self.modified_chunks.add(chunk_key)
         return True
 
     def is_solid(self, x, y=None, z=None):
@@ -159,6 +181,7 @@ class World:
 
         self.blocks.clear()
         self.generated_chunks.clear()
+        self.modified_chunks.clear()
         self.respawn_queue.clear()
         self.portals.clear()
 
@@ -202,9 +225,22 @@ class World:
         return self.spawn_point
 
     def _generate_chunk(self, cx, cz, heightmap=None):
-        """Fuellt den Chunk (cx, cz) mit Bloecken anhand der Hoehenkarte."""
+        """Erzeugt einen Chunk unter dem Generierungs-Flag ``_generating``.
+
+        Das Flag verhindert, dass interne Schreibzugriffe (Erze, Baeume)
+        den Chunk als Spieler-aendert markieren – sonst waere nach dem
+        Entladen jede Regeneration "modified" und nichts wuerde freigegeben.
+        """
         if (cx, cz) in self.generated_chunks:
             return  # bereits generiert – keine Aenderungen ueberschreiben
+        self._generating = True
+        try:
+            self._generate_chunk_impl(cx, cz, heightmap)
+        finally:
+            self._generating = False
+
+    def _generate_chunk_impl(self, cx, cz, heightmap=None):
+        """Fuellt den Chunk (cx, cz) mit Bloecken anhand der Hoehenkarte."""
         if heightmap is None:
             if self._heightmap is None:
                 self._heightmap = self._build_heightmap()
@@ -215,6 +251,10 @@ class World:
         x_end = min(x_start + CHUNK_SIZE, self.width)
         z_end = min(z_start + CHUNK_SIZE, self.depth)
         chunk_datum = self.dimension_data
+        # Deterministische Zufallswerte NUR fuer diesen Chunk: Erze und
+        # Baeume haengen nicht von der Chunk-Erreichfolge ab – Voraussetzung
+        # dafuer, dass entladene Chunks identisch neu erzeugt werden koennen.
+        rng = random.Random(f"{self.seed}:{cx}:{cz}")
 
         for x in range(x_start, x_end):
             for z in range(z_start, z_end):
@@ -240,12 +280,12 @@ class World:
                 )
 
                 # Erze im Untergrund.
-                self._place_ores(x, z, surface_y, chunk_datum)
+                self._place_ores(x, z, surface_y, chunk_datum, rng)
 
         # Baeume, sofern Holz und Blaetter generell existieren.
         if "wood" in BLOCK_PROPERTIES and "leaves" in BLOCK_PROPERTIES:
             self._place_trees_in_chunk(
-                cx, cz, heightmap, x_start, x_end, z_start, z_end,
+                cx, cz, heightmap, x_start, x_end, z_start, z_end, rng,
             )
 
         self.generated_chunks.add((cx, cz))
@@ -260,17 +300,35 @@ class World:
             self.generate_chunk(cx, cz)
 
     def get_chunk_blocks(self, cx, cz):
-        """Alle Bloecke eines Chunks als Liste von ``(x, y, z, block_name)``."""
-        x_start = cx * CHUNK_SIZE
-        z_start = cz * CHUNK_SIZE
-        x_end = min(x_start + CHUNK_SIZE, self.width)
-        z_end = min(z_start + CHUNK_SIZE, self.depth)
+        """Alle Bloecke eines Chunks als Liste von ``(x, y, z, block_name)``.
 
-        blocks = []
-        for (x, y, z), block_name in self.blocks.items():
-            if x_start <= x < x_end and z_start <= z < z_end:
-                blocks.append((x, y, z, block_name))
-        return blocks
+        Liest nur den einen Chunk-Eintrag – O(Chunk) unabhaengig von der
+        Weltgroesse (ein Scan ueber alle Bloecke wuerde beim Laden jedes
+        Chunks bei 1000x1000 die ganze Welt abarbeiten).
+        """
+        sub = self.blocks.get((cx, cz))
+        if not sub:
+            return []
+        return [(x, y, z, name) for (x, y, z), name in sub.items()]
+
+    def block_count(self):
+        """Anzahl aller gespeicherten Bloecke (fuer Diagnose/Tests)."""
+        return sum(len(sub) for sub in self.blocks.values())
+
+    def drop_chunk(self, cx, cz):
+        """Entlaedt die Daten eines unveraenderten Chunks (RAM-Sparen).
+
+        Spieler-/Spawn-/Respawn-aenderte Chunks (``modified_chunks``)
+        bleiben erhalten. Beim naechsten Besuch wird der Chunk ueber die
+        pro-Chunk-RNG identisch neu erzeugt. Gibt True zurueck, wenn
+        der Chunk entladen wurde.
+        """
+        key = (cx, cz)
+        if key in self.modified_chunks:
+            return False
+        self.blocks.pop(key, None)
+        self.generated_chunks.discard(key)
+        return True
 
     def _height_at(self, x, z):
         """Naeherungs-Hoehe einer Spalte ohne numpy-Hoehenkarte."""
@@ -340,39 +398,49 @@ class World:
             return blocks[0]
         return "stone"
 
-    def _place_ores(self, x, z, surface_y, chunk_datum):
+    def _place_ores(self, x, z, surface_y, chunk_datum, rng):
         """Verteilt flachennahe und tiefe Erze unter der Oberflaeche."""
         data = chunk_datum or self.dimension_data
         blocks = data.get("blocks", [])
         shallow = [b for b in blocks if "ore" in b and b in BLOCK_PROPERTIES]
 
         if shallow:
-            for _ in range(random.randint(1, 2)):
-                depth = random.randint(2, 8)
+            for _ in range(rng.randint(1, 2)):
+                depth = rng.randint(2, 8)
                 y = surface_y - depth
                 if y >= 1:
-                    self.set_block(x, y, z, random.choice(shallow))
+                    self.set_block(x, y, z, rng.choice(shallow))
 
-        if random.random() < 0.15:
+        if rng.random() < 0.15:
             deep = [
                 b for b in ("diamond_ore", "gold_ore", "iron_ore")
                 if b in BLOCK_PROPERTIES
             ]
             if deep:
-                depth = random.randint(12, 25)
+                depth = rng.randint(12, 25)
                 y = surface_y - depth
                 if y >= 1:
-                    self.set_block(x, y, z, random.choice(deep))
+                    self.set_block(x, y, z, rng.choice(deep))
 
     # ------------------------------------------------------------------
     # Baeume
     # ------------------------------------------------------------------
     def _place_trees_in_chunk(
-        self, cx, cz, heightmap, x_start, x_end, z_start, z_end,
+        self, cx, cz, heightmap, x_start, x_end, z_start, z_end, rng,
     ):
-        """Setzt etwa 0.8 Prozent der geeigneten Spalten mit einem Baum."""
+        """Setzt etwa 0.8 Prozent der geeigneten Spalten mit einem Baum.
+
+        Baeume werden nur mit mindestens 2 Bl Randabstand zur Chunk-Grenze
+        gepflanzt, damit die Blaetterwolke (Reichweite +-2) komplett im
+        eigenen Chunk landet: Chunks bleiben dadurch vollstaendig
+        eigenstaendig und koennen deterministisch entladen und neu erzeugt
+        werden, ohne Nachbar-Chunks anzufassen.
+        """
         for x in range(x_start, x_end):
             for z in range(z_start, z_end):
+                if not (x_start + 2 <= x < x_end - 2 and
+                        z_start + 2 <= z < z_end - 2):
+                    continue  # Baum wuerde ueber den Chunk-Rand ragen
                 if heightmap is None:
                     surface_y = self._height_at(x, z)
                 else:
@@ -383,13 +451,13 @@ class World:
                 on_soil = ground in ("dirt", "grass") or surface in ("dirt", "grass")
                 if not on_soil:
                     continue
-                if random.random() >= 0.008:
+                if rng.random() >= 0.008:
                     continue
-                self._grow_tree(x, surface_y + 1, z)
+                self._grow_tree(x, surface_y + 1, z, rng)
 
-    def _grow_tree(self, x, y, z):
+    def _grow_tree(self, x, y, z, rng):
         """Erzeugt einen Baum mit Stamm und Blaetterwolke."""
-        trunk_height = random.randint(4, 6)
+        trunk_height = rng.randint(4, 6)
         for offset in range(trunk_height):
             self.set_block(x, y + offset, z, "wood")
 
@@ -451,10 +519,14 @@ class World:
             "seed": self.seed,
             "blocks": {
                 f"{x},{y},{z}": name
-                for (x, y, z), name in self.blocks.items()
+                for sub in self.blocks.values()
+                for (x, y, z), name in sub.items()
             },
             "generated_chunks": [
                 list(chunk) for chunk in self.generated_chunks
+            ],
+            "modified_chunks": [
+                list(chunk) for chunk in sorted(self.modified_chunks)
             ],
             "spawn_point": list(self.spawn_point) if self.spawn_point else None,
             "portals": self.portals,
@@ -478,13 +550,24 @@ class World:
                 x, y, z = (int(part) for part in parts)
             except (TypeError, ValueError):
                 continue
-            self.blocks[(x, y, z)] = block_name
+            chunk_key = (x // CHUNK_SIZE, z // CHUNK_SIZE)
+            self.blocks.setdefault(chunk_key, {})[(x, y, z)] = block_name
 
         self.generated_chunks = {
             tuple(chunk)
             for chunk in data.get("generated_chunks", [])
             if len(chunk) == 2
         }
+        raw_modified = data.get("modified_chunks")
+        if raw_modified is None:
+            # Altes Save-Format ohne diese Angabe: konservativ alles als
+            # geaendert behandeln, damit keine Spieleraenderungen durch
+            # Entladen verloren gehen.
+            self.modified_chunks = set(self.blocks.keys())
+        else:
+            self.modified_chunks = {
+                tuple(chunk) for chunk in raw_modified if len(chunk) == 2
+            }
         spawn = data.get("spawn_point")
         self.spawn_point = tuple(spawn) if spawn else None
         self.portals = data.get("portals", [])

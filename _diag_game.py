@@ -75,7 +75,7 @@ def dump():
         print("scene_entities:", len(scene.entities), flush=True)
         print("chunk_meshes:", len(chunk_meshes), flush=True)
         print("chunks:", len(game.world.chunks), flush=True)
-        print("data_blocks:", len(game.world.data.blocks), flush=True)
+        print("data_blocks:", game.world.data.block_count(), flush=True)
         print("player_pos:", tuple(round(v, 1) for v in game.player.position), flush=True)
         print("player_grounded:", game.player.grounded, flush=True)
         print("camera_wp:", tuple(round(v, 1) for v in camera.world_position), flush=True)
