@@ -9,18 +9,27 @@ die gesamte 3D-Voxelwelt:
 - Sky + FirstPersonController (WASD + Maus, Springen mit Space)
 - Die Voxel-Welt aus Chunks (siehe utils/voxel_world.py)
 
-PHASE 2 (Voxel-Welt): Die Welt wird chunkweise generiert und um den
-Spieler herum dynamisch nachgeladen. Links klicken baut Blöcke ab,
-rechts klicken platziert Blöcke aus der Hotbar (Tasten 1-5).
-Offen für die nächsten Phasen: Voll-Inventar/Crafting-UI, Mobs,
-Portale, Dimensionen und Speichern/Laden.
+Die Welt wird chunkweise generiert und um den Spieler herum dynamisch
+nachgeladen. Das Inventar öffnet mit E, das Crafting-Menü mit C.
+Links klicken baut Blöcke ab; rechts klicken platziert einen Block aus
+der Hotbar (Tasten 1-9, Mausrad).
 
 Starte das Spiel mit: python main.py
 """
 
-import math
-
-from ursina import *
+from ursina import (
+    AmbientLight,
+    DirectionalLight,
+    Entity,
+    Sky,
+    Text,
+    Ursina,
+    camera,
+    color,
+    raycast,
+    time,
+    window,
+)
 from utils.player_controller import VoxelPlayer
 
 from utils.constants import (
@@ -33,6 +42,7 @@ from utils.constants import (
 )
 from utils.inventory import Inventory
 from utils.crafting import CraftingSystem
+from utils.game_ui import GameUI
 from utils.voxel_world import VoxelWorld, BlockTextureLibrary
 
 
@@ -117,14 +127,6 @@ class Game(Entity):
         self.inventory = Inventory()
         self.crafting = CraftingSystem()
 
-        # Spieleoberflaeche: Tastenrouting, Maus-Lock, Nachrichten und
-        # die Inventar-/Crafting-Panels. player/crosshair werden ausgeblendet,
-        # so lange ein Menue geoeffnet ist.
-        self.ui = GameUI(
-            self.inventory, self.crafting,
-            player=self.player, crosshair=self.crosshair,
-        )
-
         # Crosshair in der Bildschirmmitte
         self.crosshair = Text(
             parent=camera.ui,
@@ -132,6 +134,12 @@ class Game(Entity):
             origin=(0, 0),
             scale=1.2,
             color=color.white,
+        )
+
+        # Menüs blenden Spielersteuerung und Crosshair aus.
+        self.ui = GameUI(
+            self.inventory, self.crafting,
+            player=self.player, crosshair=self.crosshair,
         )
 
     # =========================================================
@@ -147,15 +155,21 @@ class Game(Entity):
         # Respawn-Warteschlange der Welt ticken (dt in Sekunden)
         self.world.data.update(time.dt)
 
-        selected = self.hotbar[self.hotbar_index] if self.hotbar else "-"
+        selected = self.inventory.get_selected_item() or "-"
+        inventory_counts = {}
+        for slot in self.inventory.slots:
+            if not slot.is_empty():
+                inventory_counts[slot.item] = (
+                    inventory_counts.get(slot.item, 0) + slot.count
+                )
         inv_str = ", ".join(
-            f"{k}:{v}" for k, v in sorted(self.inventory.items())
+            f"{k}:{v}" for k, v in sorted(inventory_counts.items())
         ) or "-"
         self.hud_text.text = (
             f"Position: ({p.x:.1f}, {p.y:.1f}, {p.z:.1f})  |  "
             f"Dimension: {self.current_dimension}  |  "
             f"FPS: {int(1 / time.dt) if time.dt > 0 else 0}\n"
-            f"Hotbar [{self.hotbar_index + 1}]: {selected}  |  "
+            f"Hotbar [{self.inventory.selected_slot + 1}]: {selected}  |  "
             f"Links: abbauen, Rechts: platzieren\n"
             f"Drops: {inv_str}"
         )
@@ -166,11 +180,16 @@ class Game(Entity):
     def input(self, key):
         """Alle Tasten an die Oberflaeche (GameUI) weiterleiten.
 
-        Ersetzt die alten Toy-Hotbar-Logik (1-5, abbauen/platzieren): das
-        echte Inventar mit 9-Hotbar-Slots uebernimmt Auswahl und Platzieren.
-        Die F3-Toggle der HUD-Textanzeige bleibt erhalten.
+        Das Inventar verwaltet Hotbar-Auswahl, Menüs und Welt-Interaktionen.
         """
-        self.ui.handle_key(key)
+        if self.ui.handle_key(key) or self.ui.any_open:
+            return
+        if key == "left mouse down":
+            self._break_targeted_block()
+            self.ui.refresh()
+        elif key == "right mouse down":
+            self._place_targeted_block()
+            self.ui.refresh()
 
     # =========================================================
     # BLOCK-INTERAKTION (Raycast von der Kamera)
@@ -186,7 +205,7 @@ class Game(Entity):
             camera.world_position,
             camera.forward,
             distance=MAX_INTERACTION_RANGE,
-            ignore=(self.player, self.sky),
+            ignore=[self.player, self.sky],
         )
         if not hit.hit or hit.entity is None:
             return None, None
@@ -194,6 +213,8 @@ class Game(Entity):
             return None, None
 
         p, n = hit.world_point, hit.normal
+        if p is None or n is None:
+            return None, None
         c1 = (
             round(p.x - n[0] * 0.5),
             round(p.y - n[1] * 0.5),
@@ -222,9 +243,12 @@ class Game(Entity):
     def _place_targeted_block(self):
         """Rechtsklick: ausgewähltes Inventar-Slot neben dem setzen."""
         _, place_pos = self._raycast_block()
-        if place_pos is None or self.inventory.slots[self.inventory.selected_slot].is_empty():
+        if place_pos is None:
             return
-        block_name = self.inventory.slots[self.inventory.selected_slot].item
+        slot = self.inventory.get_selected_slot()
+        if slot.is_empty() or slot.item not in BLOCK_PROPERTIES:
+            return
+        block_name = slot.item
         if self.world.get_block(*place_pos) is not None:
             return  # Zielzelle bereits belegt
         # Nicht in den eigenen Koerper platzieren
@@ -236,7 +260,8 @@ class Game(Entity):
             and py - 1 <= place_pos[1] <= py + 2
         ):
             return
-        self.world.place_block(*place_pos, block_name)
+        if self.world.place_block(*place_pos, block_name):
+            slot.remove(1)
 
     # =========================================================
     # RUN (startet die Ursina-Hauptschleife)

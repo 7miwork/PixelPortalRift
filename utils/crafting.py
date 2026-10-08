@@ -82,6 +82,10 @@ class CraftingSystem:
             return False
         
         recipe = self.recipes[recipe_name]
+        slot_state = [
+            (slot.item, slot.count, slot.durability)
+            for slot in inventory.slots
+        ]
         
         # Zutaten aus dem Inventar entfernen
         for ingredient, count in recipe["ingredients"].items():
@@ -90,8 +94,14 @@ class CraftingSystem:
         # Ergebnis hinzufügen
         result_count = recipe.get("result_count", 1)
         remaining = inventory.add_item(recipe_name, result_count)
-        
-        return remaining == 0
+        if remaining:
+            for slot, (item, count, durability) in zip(
+                    inventory.slots, slot_state):
+                slot.item = item
+                slot.count = count
+                slot.durability = durability
+            return False
+        return True
     
     def toggle_open(self, inventory):
         """Öffnet oder schließt das Crafting-Menü."""
@@ -129,4 +139,3 @@ class CraftingSystem:
                 return True
         return False
     
-

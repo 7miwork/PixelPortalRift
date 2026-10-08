@@ -75,15 +75,18 @@ class InventorySlot:
                  (0 = alles passte)
         """
         if self.is_empty():
-            # Slot ist leer → neu befüllen
+            props = ITEM_PROPERTIES.get(
+                item_name, {"stackable": True, "max_stack": 64})
+            capacity = props.get("max_stack", 64) if props.get(
+                "stackable", True) else 1
+            to_add = min(count, capacity)
             self.item = item_name
-            self.count = count
-            props = ITEM_PROPERTIES.get(item_name, {})
+            self.count = to_add
             if durability is not None:
                 self.durability = durability
             elif props.get("durability"):
                 self.durability = props["durability"]
-            return 0  # Alles hinzugefügt
+            return count - to_add
         
         if self.item != item_name:
             return count  # Kann nicht hinzugefügt werden
@@ -193,7 +196,7 @@ class Inventory:
         
         # Schritt 1: Vorhandene Stapel auffüllen
         for slot in self.slots:
-            if not slot.is_empty() and slot.item == item_name and slot.can_add(item_name, remaining):
+            if not slot.is_empty() and slot.item == item_name:
                 remaining = slot.add(item_name, remaining, durability)
                 if remaining <= 0:
                     return 0

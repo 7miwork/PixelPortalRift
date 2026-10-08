@@ -31,7 +31,7 @@ import os
 import pygame                    # nur fürs Icon-Zeichnen (asset_loader)
 from PIL import Image
 from panda3d.core import Texture as PTexture
-from ursina import Entity, Text, Texture, color, invoke, mouse
+from ursina import Entity, Text, Texture, camera, color, invoke, mouse
 
 from utils.asset_loader import AssetLoader
 from utils.constants import BLOCK_PROPERTIES, ITEM_PROPERTIES
@@ -181,9 +181,10 @@ class HotbarUI(Entity):
     einen weißen Rahmen. Mausklick wählt den Slot (wie Minecraft).
     """
 
-    def __init__(self, parent, inventory, icons):
+    def __init__(self, parent, inventory, icons, on_change=None):
         super().__init__(parent=parent)
         self.inventory = inventory
+        self.on_change = on_change
         n = inventory.hotbar_size
         total = n * SLOT + (n - 1) * SLOT_GAP
         self.slots = []
@@ -197,6 +198,8 @@ class HotbarUI(Entity):
     def _click(self, index):
         """Slot per Mausklick auswählen (zusätzlich zu Tasten 1-9)."""
         self.inventory.select_slot(index)
+        if self.on_change is not None:
+            self.on_change()
 
     def refresh(self):
         """Visuals aus dem Inventar neu zeichnen (günstig: nur bei Änderung)."""
@@ -216,10 +219,11 @@ class InventoryPanel(Entity):
     gehaltene Gegenstand automatisch zurückgelegt (return_held).
     """
 
-    def __init__(self, parent, inventory, icons):
+    def __init__(self, parent, inventory, icons, on_change=None):
         super().__init__(parent=parent, enabled=False)
         self.inventory = inventory
         self.icons = icons
+        self.on_change = on_change
 
         # Abdunkelnder Hintergrund über dem gesamten Bildschirm
         Entity(parent=self, model="quad", scale=(4, 3),
@@ -255,7 +259,10 @@ class InventoryPanel(Entity):
     def _click(self, index):
         """Klick auf einen Slot → Logik in inventory.handle_slot_click."""
         self.inventory.handle_slot_click(index)
-        self.refresh()
+        if self.on_change is not None:
+            self.on_change()
+        else:
+            self.refresh()
 
     def open(self):
         self.enabled = True
@@ -305,10 +312,14 @@ class CraftingPanel(Entity):
     man es trotzdem noch auswählen kann.
     """
 
-    def __init__(self, parent, crafting, icons):
+    def __init__(self, parent, crafting, inventory, icons,
+                 on_result=None, on_change=None):
         super().__init__(parent=parent, enabled=False)
         self.crafting = crafting
+        self.inventory = inventory
         self.icons = icons
+        self.on_result = on_result
+        self.on_change = on_change
 
         Entity(parent=self, model="quad", scale=(4, 3),
                color=color.rgba(0, 0, 0, 0.55))
@@ -321,11 +332,15 @@ class CraftingPanel(Entity):
 
         row_y = 0.30
         self.rows = []
+        self.row_content = []
         for i in range(CRAFT_ROWS):
             row_ent = Entity(parent=self, position=(0, row_y),
-                             model="quad", scale=(SLOT, CRAFT_ROW_H),
-                             color=color.rgba(0.28, 0.28, 0.32, 1))
+                             model="quad", scale=(0.88, CRAFT_ROW_H),
+                             color=color.rgba(0.28, 0.28, 0.32, 1),
+                             collider="box")
+            row_ent.on_click = lambda i=i: self._click(i)
             self.rows.append(row_ent)
+            self.row_content.append([])
             row_y -= CRAFT_ROW_H + 0.010
 
         self.scrollbar_track = Entity(parent=self, model="quad",
@@ -337,18 +352,6 @@ class CraftingPanel(Entity):
                                       position=(0.5, 0.275),
                                       color=color.rgba(0.7, 0.7, 0.7, 0.9),
                                       enabled=False)
-
-        # Zutaten-Labels pro Zeile (CraftingSystem nutzt max. 4 Zutaten)
-        self.ingredient_labels = []
-        for i in range(CRAFT_ROWS):
-            labels = []
-            for j in range(4):
-                t = Text(parent=self.rows[i], text="",
-                         origin=(-0.5, 0), x=0.05,
-                         y=0.012 - j * 0.016, scale=0.34,
-                         color=color.green)
-                labels.append(t)
-            self.ingredient_labels.append(labels)
 
         self.footer = Text(parent=self, text="Klick = herstellen | "
                                          "Mausrad = blättern | C = schliessen",
@@ -362,26 +365,33 @@ class CraftingPanel(Entity):
         if not (0 <= idx < len(crafting.craftable_recipes)):
             return
         crafting.select_recipe(row_index)
+        recipe_name = crafting.craftable_recipes[idx][0]
         ok = crafting.craft_selected(self.inventory)
         self.refresh()
         if ok:
-            self.crafting.on_success()
-        elif crafting.on_failure is not None:
-            crafting.on_failure()
+            if self.on_result is not None:
+                self.on_result(f"{recipe_name} hergestellt")
+        elif self.on_result is not None:
+            self.on_result("Zutaten fehlen oder Inventar ist voll")
+        if self.on_change is not None:
+            self.on_change()
 
     def _paint_row(self, i):
         """Pinsel für Zeile i: Hintergrund, Icon, Name, Zutaten."""
         crafting = self.crafting
         idx = i + crafting.scroll_offset
         row = self.rows[i]
+        for child in self.row_content[i]:
+            child.destroy()
+        self.row_content[i].clear()
         can = crafting.craftable_recipes
         if not (0 <= idx < len(can)):
             row.enabled = False
             row.color = color.rgba(0, 0, 0, 0)
             return
 
-        recipe_name, recipe_data, can_make = can[idx]
-        selected = (recipe_name == crafting.selected_recipe)
+        recipe_name, recipe_data = can[idx][:2]
+        selected = (idx == crafting.selected_recipe)
         row.enabled = True
         row.color = color.rgba(0.35, 0.35, 0.45, 1) if not selected \
             else color.rgba(0.45, 0.45, 0.6, 1)
@@ -389,7 +399,8 @@ class CraftingPanel(Entity):
         # Icon
         tex, col = self.icons.get(recipe_name)
         icon = Entity(parent=row, model="quad", scale=(0.045, 0.045),
-                      x=-0.26)
+                      x=-0.40)
+        self.row_content[i].append(icon)
         if tex is not None:
             icon.texture = tex
             icon.color = color.white
@@ -398,13 +409,16 @@ class CraftingPanel(Entity):
             icon.color = col
 
         # Name + Ergebnis
-        Text(parent=row, text=recipe_name, origin=(-0.5, 0),
-             x=-0.22, y=0.012, scale=0.42, color=color.white)
+        name_text = Text(parent=row, text=recipe_name, origin=(-0.5, 0),
+                         x=-0.36, y=0.012, scale=0.42,
+                         color=color.white)
+        self.row_content[i].append(name_text)
         result = recipe_data.get("result_count", 1)
         if result > 1:
-            Text(parent=row, text="x%d" % result,
-                 origin=(0.5, -0.5), x=-0.22, y=-0.012, scale=0.30,
-                 color=color.rgba(0.8, 0.8, 0.8, 0.8))
+            result_text = Text(parent=row, text="x%d" % result,
+                               origin=(0.5, -0.5), x=-0.36, y=-0.012,
+                               scale=0.30, color=color.rgba(0.8, 0.8, 0.8, 0.8))
+            self.row_content[i].append(result_text)
 
         # Zutaten (CraftingSystem: ingredients = dict Name → Anzahl)
         for j, (ing_name, need) in enumerate(
@@ -413,12 +427,12 @@ class CraftingPanel(Entity):
                 break
             have = self.inventory.count_item(ing_name)
             ok = have >= need
-            t = Text(parent=row, text="%s: %d/%d" % (ing_name, have, need),
-                     origin=(-0.5, 0), x=0.05,
-                     y=0.012 - j * 0.016, scale=0.34,
-                     color=color.green if ok else color.red)
-            self.ingredient_labels[i][j].text = t.text
-            self.ingredient_labels[i][j].color = t.color
+            ingredient_text = Text(
+                parent=row, text="%s: %d/%d" % (ing_name, have, need),
+                origin=(-0.5, 0), x=-0.08, y=0.012 - j * 0.016,
+                scale=0.34, color=color.green if ok else color.red,
+            )
+            self.row_content[i].append(ingredient_text)
 
         if selected:
             row.color = color.rgba(0.45, 0.45, 0.6, 1)
@@ -465,15 +479,21 @@ class GameUI(Entity):
         self.player = player
         self.crosshair = crosshair
         self.icons = IconLibrary()
-
-        # Oberflächen
-        self.hotbar = HotbarUI(self, inventory, self.icons)
-        self.inventory_panel = InventoryPanel(self, inventory, self.icons)
-        self.crafting_panel = CraftingPanel(self, crafting, inventory,
-                                            self.icons)
         self.message = Text(parent=camera.ui, origin=(0, 0), scale=0.6,
                             position=(0, 0.315), text='')
         self._msg_token = 0
+
+        # Oberflächen
+        self.hotbar = HotbarUI(
+            self, inventory, self.icons, on_change=self.refresh,
+        )
+        self.inventory_panel = InventoryPanel(
+            self, inventory, self.icons, on_change=self.refresh,
+        )
+        self.crafting_panel = CraftingPanel(
+            self, crafting, inventory, self.icons,
+            on_result=self.show_message, on_change=self.refresh,
+        )
         self._sync()
 
     # ------------------------------------------------------------------
@@ -499,11 +519,21 @@ class GameUI(Entity):
             return True
         if isinstance(key, str) and len(key) == 1 and key.isdigit():
             self.inventory.select_slot(int(key) - 1)
+            self.hotbar.refresh()
             return True
         return False
 
+    def refresh(self):
+        """Synchronize inventory visuals after gameplay or UI changes."""
+        self.hotbar.refresh()
+        if self.inventory_panel.enabled:
+            self.inventory_panel.refresh()
+        if self.crafting_panel.enabled:
+            self.crafting_panel.refresh()
+
     def _scroll(self, key):
         if self.crafting_panel.enabled:
+            self.crafting.scroll(1 if key == 'scroll down' else -1)
             self.crafting_panel.refresh()
         else:
             self.inventory.scroll_selection(-1 if key == 'scroll up' else 1)
@@ -511,6 +541,8 @@ class GameUI(Entity):
 
     def _sync(self):
         """Maus-Lock & player.Controls disabled, solange Menü geöffnet ist."""
+        self.inventory_panel.enabled = self.inventory.is_open
+        self.crafting_panel.enabled = self.crafting.is_open
         any_open = self.any_open
         mouse.locked = not any_open
         if self.player is not None:
@@ -519,12 +551,7 @@ class GameUI(Entity):
                 self.player.cursor.enabled = not any_open
         if self.crosshair is not None:
             self.crosshair.enabled = not any_open
-        self.inventory_panel.enabled = self.inventory.is_open
-        self.crafting_panel.enabled = self.crafting.is_open
-        if self.inventory.is_open:
-            self.inventory_panel.refresh()
-        if self.crafting.is_open:
-            self.crafting_panel.refresh()
+        self.refresh()
 
     def _toggle_inventory(self):
         if self.inventory.is_open:
