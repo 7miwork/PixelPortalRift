@@ -366,6 +366,13 @@ class VoxelWorld:
         # entsteht, statt die komplette Welt erst im Hintergrund aufzubauen.
         self.data.generate_chunks(wanted)
 
+        # WICHTIG (Reihenfolge!): Erst die Spawn-Area freiräumen (Bäume/Blätter
+        # entfernen), DANN rendern. Wird zuerst gerendert und danach
+        # freigeräumt, bleiben die entfernten Blöcke als unsichtbare Collider
+        # im Mesh stehen: der Spieler läuft dann gegen Luft bzw. steht auf
+        # unsichtbaren Baumkronen.
+        spawn = self.data.ensure_spawn_point()
+
         for chunk_coords in wanted:
             if chunk_coords in self.chunks:
                 continue
@@ -375,8 +382,7 @@ class VoxelWorld:
                 chunk.set_block(x, y, z, block)
             self.add_chunk(chunk)
 
-        # Spawn-Point bestimmen und Spawn-Area freiraeumen (kein Baum im Weg).
-        return self.data.ensure_spawn_point()
+        return spawn
 
     # =========================================================
     # BLOCK-ZUGRIFF (weltweit, über Chunk-Grenzen hinweg)

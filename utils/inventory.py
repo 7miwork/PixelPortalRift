@@ -9,10 +9,14 @@ Es enthält zwei Klassen:
 
 Das Inventar hat 36 Slots, davon 9 in der Hotbar (schnell erreichbar).
 Gegenstände können gestapelt werden (stackable), wenn sie denselben Typ haben.
+
+WICHTIG: Dieses Modul ist reine Spiellogik – KEIN pygame. Die Darstellung
+(Hotbar, Inventar-Fenster, Mauszeiger) übernimmt die Ursina-UI in
+utils/game_ui.py. Die Drag-and-Drop-Semantik bleibt hier (handle_slot_click),
+damit sie ohne Fenster testbar ist.
 """
 
-import pygame
-from utils.constants import TILE_SIZE, ITEM_PROPERTIES, SCREEN_WIDTH
+from utils.constants import ITEM_PROPERTIES
 
 
 class InventorySlot:
@@ -314,50 +318,22 @@ class Inventory:
         """Öffnet oder schließt das Inventar-Fenster."""
         self.is_open = not self.is_open
     
-    def get_slot_at_pos(self, mouse_pos, screen):
+    def handle_slot_click(self, slot_index):
         """
-        Findet heraus, welcher Slot an einer Bildschirm-Position ist.
-        
-        Berechnet die Position jedes Slots im Inventar-Fenster.
-        
-        :param mouse_pos: (x, y) Mausposition
-        :param screen: Die pygame-Oberfläche (für Bildschirmgröße)
-        :return: Slot-Index oder None
-        """
-        slot_size = 50
-        padding = 4
-        cols = 9
-        rows = self.size // cols
-        total_width = cols * (slot_size + padding) - padding
-        total_height = rows * (slot_size + padding) - padding
-        start_x = (screen.get_width() - total_width) // 2
-        start_y = (screen.get_height() - total_height) // 2
+        Verarbeitet einen Klick auf einen Slot (Drag-and-Drop).
 
-        mx, my = mouse_pos
-        for i in range(self.size):
-            row = i // cols
-            col = i % cols
-            x = start_x + col * (slot_size + padding)
-            y = start_y + row * (slot_size + padding)
-            if x <= mx <= x + slot_size and y <= my <= y + slot_size:
-                return i
-        return None
+        Die UI (utils/game_ui.py) liefert nur den Slot-Index; die Semantik
+        bleibt exakt wie im 2D-Original:
 
-    def handle_mouse_click(self, mouse_pos, screen):
+        - Kein Gegenstand gehalten → Gegenstand aus dem Slot aufnehmen
+        - Gegenstand gehalten + Slot leer → komplett ablegen
+        - Gegenstand gehalten + gleicher Typ → stapeln (max. max_stack)
+        - Gegenstand gehalten + anderer Typ → mit dem Herkunfts-Slot tauschen
+
+        :param slot_index: Index des angeklickten Slots (0..size-1)
         """
-        Verarbeitet Mausklicks im Inventar-Fenster (Drag-and-Drop).
-        
-        Wenn kein Gegenstand gehalten wird: Nimm den angeklickten Gegenstand auf.
-        Wenn ein Gegenstand gehalten wird: Lege ihn ab (stapeln, tauschen, etc.).
-        
-        :param mouse_pos: (x, y) Mausposition
-        :param screen: Die pygame-Oberfläche
-        """
-        self.mouse_pos = mouse_pos
-        slot_index = self.get_slot_at_pos(mouse_pos, screen)
-        if slot_index is None:
+        if not 0 <= slot_index < self.size:
             return
-
         target_slot = self.slots[slot_index]
 
         if self.held_item is None:
@@ -367,44 +343,81 @@ class Inventory:
                 self.held_count = target_slot.count
                 self.held_durability = target_slot.durability
                 self.held_origin_slot = slot_index
-                # Slot leeren
                 target_slot.item = None
                 target_slot.count = 0
                 target_slot.durability = None
+            return
+
+        # ----- Gegenstand ablegen -----
+        if target_slot.is_empty():
+            # Einfach in den leeren Slot legen
+            target_slot.item = self.held_item
+            target_slot.count = self.held_count
+            target_slot.durability = self.held_durability
+            self._clear_held()
+        elif target_slot.item == self.held_item:
+            # Gleicher Gegenstand → stapeln (so viel wie möglich)
+            props = ITEM_PROPERTIES.get(
+                self.held_item, {"stackable": True, "max_stack": 64})
+            max_stack = props.get("max_stack", 64)
+            space = max_stack - target_slot.count
+            to_move = min(self.held_count, space)
+            target_slot.count += to_move
+            self.held_count -= to_move
+            if self.held_count <= 0:
+                self._clear_held()
+        elif self.held_origin_slot is not None:
+            # Unterschiedliche Gegenstände → mit Herkunftsslot tauschen
+            origin_slot = self.slots[self.held_origin_slot]
+            (origin_slot.item, target_slot.item) = (target_slot.item, self.held_item)
+            (origin_slot.count, target_slot.count) = (target_slot.count, self.held_count)
+            (origin_slot.durability, target_slot.durability) = (
+                target_slot.durability, self.held_durability)
+            self._clear_held()
         else:
-            # ----- Gegenstand ablegen -----
-            if target_slot.is_empty():
-                # Einfach in den leeren Slot legen
-                target_slot.item = self.held_item
-                target_slot.count = self.held_count
-                target_slot.durability = self.held_durability
-                self.held_item = None
-                self.held_count = 0
-                self.held_durability = None
-                self.held_origin_slot = None
-            elif target_slot.item == self.held_item:
-                # Gleicher Gegenstand → stapeln (so viel wie möglich)
-                props = ITEM_PROPERTIES.get(self.held_item, {"stackable": True, "max_stack": 64})
-                max_stack = props.get("max_stack", 64)
-                space = max_stack - target_slot.count
-                to_move = min(self.held_count, space)
-                target_slot.count += to_move
-                self.held_count -= to_move
-                if self.held_count <= 0:
-                    self.held_item = None
-                    self.held_count = 0
-                    self.held_durability = None
-                    self.held_origin_slot = None
-            else:
-                # Unterschiedliche Gegenstände → tauschen
-                origin_slot = self.slots[self.held_origin_slot]
-                (origin_slot.item, target_slot.item) = (target_slot.item, self.held_item)
-                (origin_slot.count, target_slot.count) = (target_slot.count, self.held_count)
-                (origin_slot.durability, target_slot.durability) = (target_slot.durability, self.held_durability)
-                self.held_item = None
-                self.held_count = 0
-                self.held_durability = None
-                self.held_origin_slot = None
+            # Kein Herkunftsslot bekannt → nicht tauschen (Sicherheit)
+            self._clear_held()
+
+    def return_held(self):
+        """
+        Legt einen gehaltenen Gegenstand zurück ins Inventar.
+
+        Wird beim Schließen des Inventars aufgerufen, damit nichts
+        verloren geht. Versucht zuerst den Herkunfts-Slot, dann freie
+        Slots über add_item().
+
+        :return: True wenn der Gegenstand vollständig zurücklagert
+        """
+        if self.held_item is None:
+            return True
+        item, count, dur = self.held_item, self.held_count, self.held_durability
+
+        # Versuch 1: Herkunfts-Slot (noch leer oder gleicher Typ)
+        if self.held_origin_slot is not None:
+            origin = self.slots[self.held_origin_slot]
+            if origin.is_empty():
+                origin.item, origin.count, origin.durability = item, count, dur
+                self._clear_held()
+                return True
+            if origin.item == item and origin.can_add(item, count):
+                origin.add(item, count, dur)
+                self._clear_held()
+                return True
+
+        # Versuch 2: normale Ablage
+        remaining = self.add_item(item, count, dur)
+        if remaining <= 0:
+            self._clear_held()
+            return True
+        self.held_count = remaining
+        return False
+
+    def _clear_held(self):
+        """Setzt den Drag-and-Drop-Zustand zurück."""
+        self.held_item = None
+        self.held_count = 0
+        self.held_durability = None
+        self.held_origin_slot = None
 
     def swap_slots(self, slot1, slot2):
         """
@@ -416,120 +429,7 @@ class Inventory:
         if 0 <= slot1 < self.size and 0 <= slot2 < self.size:
             self.slots[slot1], self.slots[slot2] = self.slots[slot2], self.slots[slot1]
     
-    def draw_hotbar(self, screen, asset_loader):
-        """
-        Zeichnet die Hotbar (die 9 Schnellzugriff-Slots unten auf dem Bildschirm).
-        
-        :param screen: Die pygame-Oberfläche
-        :param asset_loader: Für die Item-Texturen
-        """
-        slot_size = 50
-        padding = 4
-        total_width = self.hotbar_size * (slot_size + padding) - padding
-        start_x = (SCREEN_WIDTH - total_width) // 2
-        start_y = screen.get_height() - slot_size - 10
-        
-        for i in range(self.hotbar_size):
-            x = start_x + i * (slot_size + padding)
-            slot = self.slots[i]
-            
-            # Ausgewählten Slot hervorheben (weißer Rahmen)
-            if i == self.selected_slot:
-                pygame.draw.rect(screen, (255, 255, 255), (x - 2, start_y - 2, slot_size + 4, slot_size + 4), 3)
-            
-            # Slot-Hintergrund
-            pygame.draw.rect(screen, (50, 50, 50), (x, start_y, slot_size, slot_size))
-            pygame.draw.rect(screen, (100, 100, 100), (x, start_y, slot_size, slot_size), 2)
-            
-            # Item im Slot zeichnen
-            if not slot.is_empty():
-                texture = asset_loader.get_item_texture(slot.item)
-                if texture:
-                    scaled = pygame.transform.scale(texture, (slot_size - 8, slot_size - 8))
-                    screen.blit(scaled, (x + 4, start_y + 4))
-                
-                # Anzahl anzeigen (wenn > 1)
-                if slot.count > 1:
-                    font = pygame.font.Font(None, 20)
-                    count_text = font.render(str(slot.count), True, (255, 255, 255))
-                    screen.blit(count_text, (x + slot_size - 15, start_y + slot_size - 18))
-                
-                # Haltbarkeitsbalken anzeigen (für Werkzeuge)
-                if slot.durability is not None and slot.item is not None:
-                    props = ITEM_PROPERTIES.get(slot.item, {})
-                    max_dur = props.get("durability", 100) or 100
-                    dur_percent = slot.durability / max_dur
-                    # Farbe: grün → gelb → rot (je nach Haltbarkeit)
-                    dur_color = (255, int(255 * dur_percent), 0)
-                    dur_width = int((slot_size - 8) * dur_percent)
-                    pygame.draw.rect(screen, dur_color, (x + 4, start_y + slot_size - 6, dur_width, 3))
-    
-    def draw_full_inventory(self, screen, asset_loader):
-        """
-        Zeichnet das vollständige Inventar-Fenster (wenn is_open=True).
-        
-        :param screen: Die pygame-Oberfläche
-        :param asset_loader: Für die Item-Texturen
-        """
-        if not self.is_open:
-            return
 
-        # Halbtransparenter Hintergrund
-        overlay = pygame.Surface((screen.get_width(), screen.get_height()), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 180))
-        screen.blit(overlay, (0, 0))
-
-        slot_size = 50
-        padding = 4
-        cols = 9
-        rows = self.size // cols
-
-        # Position des Inventar-Fensters (zentriert)
-        total_width = cols * (slot_size + padding) - padding
-        total_height = rows * (slot_size + padding) - padding
-        start_x = (screen.get_width() - total_width) // 2
-        start_y = (screen.get_height() - total_height) // 2
-
-        # Hintergrund-Rechteck
-        bg_rect = pygame.Rect(start_x - 20, start_y - 60, total_width + 40, total_height + 100)
-        pygame.draw.rect(screen, (60, 60, 60), bg_rect)
-        pygame.draw.rect(screen, (100, 100, 100), bg_rect, 3)
-
-        # Titel
-        font = pygame.font.Font(None, 36)
-        title = font.render("Inventory", True, (255, 255, 255))
-        screen.blit(title, (start_x, start_y - 45))
-
-        # Slots zeichnen
-        for i in range(self.size):
-            row = i // cols
-            col = i % cols
-            x = start_x + col * (slot_size + padding)
-            y = start_y + row * (slot_size + padding)
-            slot = self.slots[i]
-
-            pygame.draw.rect(screen, (40, 40, 40), (x, y, slot_size, slot_size))
-            pygame.draw.rect(screen, (80, 80, 80), (x, y, slot_size, slot_size), 2)
-
-            if not slot.is_empty():
-                texture = asset_loader.get_item_texture(slot.item)
-                if texture:
-                    scaled = pygame.transform.scale(texture, (slot_size - 8, slot_size - 8))
-                    screen.blit(scaled, (x + 4, y + 4))
-
-                if slot.count > 1:
-                    count_font = pygame.font.Font(None, 20)
-                    count_text = count_font.render(str(slot.count), True, (255, 255, 255))
-                    screen.blit(count_text, (x + slot_size - 15, y + slot_size - 18))
-
-        # Gehaltenen Gegenstand an Mausposition zeichnen
-        if self.held_item is not None:
-            texture = asset_loader.get_item_texture(self.held_item)
-            if texture:
-                scaled = pygame.transform.scale(texture, (40, 40))
-                mx, my = self.mouse_pos
-                screen.blit(scaled, (mx - 20, my - 20))
-    
     def get_save_data(self):
         """
         Gibt den Inventar-Zustand als Liste zurück (zum Speichern).

@@ -98,6 +98,20 @@ PLAYER_GRAVITY_3D = 30              # Schwerkraft (Blöcke pro Sekunde²)
 PLAYER_SPRINT_FACTOR_3D = 1.6       # Sprint-Multiplikator (Shift halten)
 PLAYER_HEIGHT_3D = 2                # Körpergröße des Spielers in Blöcken
 
+# --- Robuste Physik (utils/player_controller.py) ---
+# Warum diese Werte? Der FirstPersonController-Prefab von Ursina bewegt den
+# Spieler pro Frame um "speed * dt" und prüft Kollisionen nur mit kurzen
+# Raycasts am Spieler. Beim Nachladen von Chunks ruckelt das Spiel stark
+# (dt > 1 s) – dann teleportiert der Prefab den Spieler mehrere Blöcke weit
+# in einen Hang hinein und er fällt anschließend durch die Welt.
+PLAYER_MAX_PHYSICS_DT = 0.05        # Frame-Zeit für den Spieler begrenzen
+                                    # (max. 20 Physik-Schritte pro Sekunde)
+PLAYER_MAX_SUBSTEP = 0.2            # max. Blockbewegung pro Kollisions-
+                                    # Teilschritt → kein Tunneling
+PLAYER_HALF_WIDTH_3D = 0.3          # halbe Breite der Spieler-Hitbox
+PLAYER_STEP_HEIGHT_3D = 1.0         # Stufen bis 1 Block werden beim Laufen
+                                    # automatisch bestiegen (wie Minecraft)
+
 # =========================================================
 # DIMENSIONEN (Welten)
 # =========================================================

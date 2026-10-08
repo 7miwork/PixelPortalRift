@@ -10,9 +10,5 @@ ursina>=7.0
 # Hoehenkarte / Weltgenerierung (utils/world_gen.py)
 numpy>=2.0
 
-# Noch nicht migrierte 2D-Module (utils/inventory.py, crafting.py, mob.py,
-# portal.py, player.py, item_spawner.py, asset_loader.py, ...)
-pygame>=2.5
-
 # Bild-/Textur-Handling (utils/asset_loader.py, export_block_textures.py)
 pillow>=10.0

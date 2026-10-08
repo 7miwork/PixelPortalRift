@@ -21,7 +21,7 @@ Starte das Spiel mit: python main.py
 import math
 
 from ursina import *
-from ursina.prefabs.first_person_controller import FirstPersonController
+from utils.player_controller import VoxelPlayer
 
 from utils.constants import (
     BLOCK_PROPERTIES,
@@ -31,6 +31,8 @@ from utils.constants import (
     PLAYER_JUMP_HEIGHT_3D,
     PLAYER_GRAVITY_3D,
 )
+from utils.inventory import Inventory
+from utils.crafting import CraftingSystem
 from utils.voxel_world import VoxelWorld, BlockTextureLibrary
 
 
@@ -85,9 +87,12 @@ class Game(Entity):
         self.world = VoxelWorld(BlockTextureLibrary())
         spawn = self.world.generate_dimension()
 
-        # ---- Spieler: FirstPersonController aus dem Ursina-Prefab ----
+        # ---- Spieler: eigener Controller mit Voxel-Kollision ----
+        # (utils/player_controller.VoxelPlayer statt des Ursina-Prefabs:
+        #  der Prefab fällt beim Bewegen durch die Welt, siehe Modul-Doku.)
         spawn_x, spawn_y, spawn_z = spawn
-        self.player = FirstPersonController(
+        self.player = VoxelPlayer(
+            self.world,
             position=(spawn_x, spawn_y + 1.8, spawn_z),
             speed=PLAYER_SPEED_3D,
             jump_height=PLAYER_JUMP_HEIGHT_3D,
@@ -106,15 +111,19 @@ class Game(Entity):
 
         self.current_dimension = "grassland"
 
-        # ---- Hotbar: 5 Slots mit Platzier-Bloecken (Tasten 1-5) ----
-        self.hotbar = ["dirt", "cobblestone", "stone", "wood", "sand"]
-        # Nur Bloecke zulassen, die es in BLOCK_PROPERTIES wirklich gibt
-        self.hotbar = [
-            b for b in self.hotbar
-            if b in BLOCK_PROPERTIES and BLOCK_PROPERTIES[b].get("solid", True)
-        ] or ["dirt"]
-        self.hotbar_index = 0
-        self.inventory = {}  # Drop-Name → Anzahl (Vorstufe des echten Inventars)
+        # ---- Phase 3: Inventar & Crafting (nicht: dict-Vorstufe) ----
+        # 36 Slots (9 in der Hotbar) aus utils.inventory, CraftingSystem
+        # nutzt die Rezepte aus utils/constants.py
+        self.inventory = Inventory()
+        self.crafting = CraftingSystem()
+
+        # Spieleoberflaeche: Tastenrouting, Maus-Lock, Nachrichten und
+        # die Inventar-/Crafting-Panels. player/crosshair werden ausgeblendet,
+        # so lange ein Menue geoeffnet ist.
+        self.ui = GameUI(
+            self.inventory, self.crafting,
+            player=self.player, crosshair=self.crosshair,
+        )
 
         # Crosshair in der Bildschirmmitte
         self.crosshair = Text(
@@ -155,22 +164,13 @@ class Game(Entity):
     # INPUT (Tastatur- und Maus-Events von Ursina)
     # =========================================================
     def input(self, key):
-        """Hotbar-Auswahl (1-5), Block abbauen (LMB) und platzieren (RMB)."""
-        if key == "f3":
-            self.hud_text.enabled = not self.hud_text.enabled
-            return
+        """Alle Tasten an die Oberflaeche (GameUI) weiterleiten.
 
-        # Hotbar-Slot waehlen
-        if key in ("1", "2", "3", "4", "5"):
-            idx = int(key) - 1
-            if idx < len(self.hotbar):
-                self.hotbar_index = idx
-            return
-
-        if key == "left mouse down":
-            self._break_targeted_block()
-        elif key == "right mouse down":
-            self._place_targeted_block()
+        Ersetzt die alten Toy-Hotbar-Logik (1-5, abbauen/platzieren): das
+        echte Inventar mit 9-Hotbar-Slots uebernimmt Auswahl und Platzieren.
+        Die F3-Toggle der HUD-Textanzeige bleibt erhalten.
+        """
+        self.ui.handle_key(key)
 
     # =========================================================
     # BLOCK-INTERAKTION (Raycast von der Kamera)
@@ -217,14 +217,14 @@ class Game(Entity):
             return
         drop = self.world.break_block(*break_pos)
         if drop:
-            self.inventory[drop] = self.inventory.get(drop, 0) + 1
+            self.inventory.add_item(drop)
 
     def _place_targeted_block(self):
-        """Rechtsklick: ausgewaehlten Hotbar-Block neben den getroffenen setzen."""
+        """Rechtsklick: ausgewähltes Inventar-Slot neben dem setzen."""
         _, place_pos = self._raycast_block()
-        if place_pos is None or not self.hotbar:
+        if place_pos is None or self.inventory.slots[self.inventory.selected_slot].is_empty():
             return
-        block_name = self.hotbar[self.hotbar_index]
+        block_name = self.inventory.slots[self.inventory.selected_slot].item
         if self.world.get_block(*place_pos) is not None:
             return  # Zielzelle bereits belegt
         # Nicht in den eigenen Koerper platzieren
