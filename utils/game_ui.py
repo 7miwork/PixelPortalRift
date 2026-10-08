@@ -31,7 +31,16 @@ import os
 import pygame                    # nur fürs Icon-Zeichnen (asset_loader)
 from PIL import Image
 from panda3d.core import Texture as PTexture
-from ursina import Entity, Text, Texture, camera, color, invoke, mouse
+from ursina import (
+    Entity,
+    Text,
+    Texture,
+    camera,
+    color,
+    destroy,
+    invoke,
+    mouse,
+)
 
 from utils.asset_loader import AssetLoader
 from utils.constants import BLOCK_PROPERTIES, ITEM_PROPERTIES
@@ -382,7 +391,7 @@ class CraftingPanel(Entity):
         idx = i + crafting.scroll_offset
         row = self.rows[i]
         for child in self.row_content[i]:
-            child.destroy()
+            destroy(child)
         self.row_content[i].clear()
         can = crafting.craftable_recipes
         if not (0 <= idx < len(can)):

@@ -24,7 +24,7 @@ aus BLOCK_PROPERTIES in utils/constants.py — keine hartkodierten Werte.
 """
 
 import math
-import os
+from pathlib import Path
 from ursina import Entity, Mesh, Texture, color
 from utils.constants import (
     CHUNK_SIZE,
@@ -40,15 +40,17 @@ class BlockTextureLibrary:
     """
     Lädt und cached die Block-Texturen für die 3D-Welt.
 
-    Es werden die vorhandenen PNG-Dateien aus assets/blocks/ verwendet
-    (z.B. grass.png, dirt.png, stone.png). Hat ein Block keine PNG,
-    wird als Fallback die Farbe aus BLOCK_PROPERTIES["color"] benutzt.
+    Bilder aus assets/custom_blocks/<block_name>/ haben Vorrang. Wenn
+    dort keine Bilder liegen, bleiben assets/blocks/<block_name>.png und
+    danach die Farbe aus BLOCK_PROPERTIES der bisherige Fallback.
     """
 
     def __init__(self):
         self.texture_cache = {}       # Block-Name → Ursina-Texture (oder None)
         self.color_cache = {}         # Block-Name → Ursina-Farbe (Fallback)
-        self.assets_path = os.path.join("assets", "blocks")
+        project_root = Path(__file__).resolve().parent.parent
+        self.assets_path = project_root / "assets" / "blocks"
+        self.custom_assets_path = project_root / "assets" / "custom_blocks"
 
     def get_texture(self, block_name):
         """
@@ -59,8 +61,8 @@ class BlockTextureLibrary:
             return self.texture_cache[block_name]
 
         texture = None
-        image_path = os.path.join(self.assets_path, f"{block_name}.png")
-        if os.path.exists(image_path):
+        image_path = self.assets_path / f"{block_name}.png"
+        if image_path.is_file():
             try:
                 texture = Texture(image_path)
             except Exception as e:
@@ -90,11 +92,12 @@ class BlockTextureLibrary:
         return ursina_color
 
     def build_atlas(self, cell=32, cols=8):
-        """Erzeugt einmalig eine Textur-Atlas-Kachelkarte aus allen Block-PNGs.
+        """Erzeugt den Textur-Atlas aus Standardbildern und Schülerbildern.
 
         Füllt fehlende PNGs mit der BLOCK_PROPERTIES-Farbe und multipliziert
-        Textur × Farbe (exakt wie früher die Entity-Einfärbung).
-        Danach sind self.atlas_uv (Block → UV-Rechteck) und
+        Standardtexturen × Farbe. Schülerbilder bleiben unverändert.
+        Danach enthält self.atlas_uv pro Block eine Liste mit UV-Rechtecken
+        (eins pro Bildvariante) und
         self.atlas_texture (eine einzige Ursina-Textur) verfügbar.
         """
         if getattr(self, "atlas_uv", None):
@@ -107,44 +110,37 @@ class BlockTextureLibrary:
             b for b in BLOCK_PROPERTIES
             if b != "air" and BLOCK_PROPERTIES[b].get("solid", True)
         )
-        rows = ceil(len(blocks) / cols)
+        block_images = {
+            block: self._get_block_images(block, cell)
+            for block in blocks
+        }
+        tile_count = sum(len(images) for images, _ in block_images.values())
+        rows = ceil(tile_count / cols)
         atlas = Image.new("RGBA", (cols * cell, rows * cell), (0, 0, 0, 0))
         self.atlas_uv = {}
 
-        for i, block in enumerate(blocks):
+        i = 0
+        for block in blocks:
             cx = (i % cols) * cell
             cy = (i // cols) * cell
+            images, is_custom = block_images[block]
+            self.atlas_uv[block] = []
+            for img in images:
+                if not is_custom:
+                    # Standard-Texturen bleiben wie bisher eingefärbt.
+                    rgb = BLOCK_PROPERTIES[block].get("color")
+                    if rgb is not None:
+                        tint = Image.new("RGBA", img.size,
+                                         (rgb[0], rgb[1], rgb[2], 255))
+                        img = ImageChops.multiply(img, tint)
 
-            image_path = os.path.join(self.assets_path, f"{block}.png")
-            if os.path.exists(image_path):
-                img = Image.open(image_path).convert("RGBA").resize(
-                    (cell, cell), Image.NEAREST)
-            else:
-                rgb = BLOCK_PROPERTIES[block].get("color") or (255, 0, 255)
-                img = Image.new("RGBA", (cell, cell),
-                                (rgb[0], rgb[1], rgb[2], 255))
-
-            # Textur × Farbe wie bisher bei den Entity-Entities
-            rgb = BLOCK_PROPERTIES[block].get("color")
-            if rgb is not None:
-                tint = Image.new("RGBA", img.size,
-                                 (rgb[0], rgb[1], rgb[2], 255))
-                img = ImageChops.multiply(img, tint)
-
-            atlas.paste(img, (cx, cy))
-
-            atlas_w = cols * cell
-            atlas_h = rows * cell
-            eps_u = 0.5 / atlas_w
-            eps_v = 0.5 / atlas_h
-            u0 = cx / atlas_w + eps_u
-            u1 = (cx + cell) / atlas_w - eps_u
-            # WICHTIG: Ursina/Panda3D lädt PIL-Bilder mit vertikalem Flip
-            # (texture.py: FLIP_TOP_BOTTOM, speichert Bildzeile 0 an v=0) →
-            # PIL-Y-Achse (0 = oben) entspricht der gespiegelten V-Achse.
-            v0 = 1.0 - (cy + cell) / atlas_h + eps_v
-            v1 = 1.0 - cy / atlas_h - eps_v
-            self.atlas_uv[block] = (u0, v0, u1, v1)
+                atlas.paste(img, (cx, cy))
+                self.atlas_uv[block].append(
+                    self._tile_uv(cx, cy, cell, cols, rows)
+                )
+                i += 1
+                cx = (i % cols) * cell
+                cy = (i // cols) * cell
 
         self.atlas_texture = Texture(atlas)
         try:  # Pixel-Look: keine weichen Kanten zwischen Atlas-Zellen
@@ -153,6 +149,82 @@ class BlockTextureLibrary:
             self.atlas_texture.set_magfilter(PTexture.FT_nearest)
         except Exception:
             pass
+
+    def _custom_image_paths(self, block_name):
+        """Findet unterstützte Bilddateien für einen Block in Dateinamen-Reihenfolge."""
+        folder = self.custom_assets_path / block_name
+        if not folder.is_dir():
+            return []
+        extensions = {".png", ".jpg", ".jpeg", ".bmp", ".webp"}
+        return sorted(
+            (path for path in folder.iterdir()
+             if path.is_file() and path.suffix.lower() in extensions),
+            key=lambda path: path.name.casefold(),
+        )
+
+    def _get_block_images(self, block_name, cell):
+        """Lädt Custom-Bilder oder den bisherigen Standard-Fallback als Kacheln."""
+        from PIL import Image
+
+        custom_paths = self._custom_image_paths(block_name)
+        if custom_paths:
+            images = []
+            for path in custom_paths:
+                try:
+                    with Image.open(path) as source:
+                        images.append(self._fit_image(source, cell))
+                except (OSError, ValueError) as exc:
+                    print(f"Fehler beim Laden des Blockbilds {path}: {exc}")
+            if images:
+                return images, True
+
+        standard_path = self.assets_path / f"{block_name}.png"
+        if standard_path.is_file():
+            try:
+                with Image.open(standard_path) as source:
+                    return [source.convert("RGBA").resize(
+                        (cell, cell), Image.Resampling.NEAREST)], False
+            except (OSError, ValueError) as exc:
+                print(f"Fehler beim Laden von {standard_path}: {exc}")
+
+        rgb = BLOCK_PROPERTIES[block_name].get("color") or (255, 0, 255)
+        return [Image.new("RGBA", (cell, cell),
+                          (rgb[0], rgb[1], rgb[2], 255))], False
+
+    @staticmethod
+    def _fit_image(image, cell):
+        """Zentriert ein Bild auf quadratischen Ausschnitt und skaliert pixelig."""
+        from PIL import Image
+
+        image = image.convert("RGBA")
+        width, height = image.size
+        side = min(width, height)
+        left = (width - side) // 2
+        top = (height - side) // 2
+        image = image.crop((left, top, left + side, top + side))
+        return image.resize((cell, cell), Image.Resampling.NEAREST)
+
+    @staticmethod
+    def _tile_uv(cx, cy, cell, cols, rows):
+        atlas_w = cols * cell
+        atlas_h = rows * cell
+        eps_u = 0.5 / atlas_w
+        eps_v = 0.5 / atlas_h
+        u0 = cx / atlas_w + eps_u
+        u1 = (cx + cell) / atlas_w - eps_u
+        # Ursina/Panda3D flips PIL images vertically when creating a texture.
+        v0 = 1.0 - (cy + cell) / atlas_h + eps_v
+        v1 = 1.0 - cy / atlas_h - eps_v
+        return u0, v0, u1, v1
+
+    @staticmethod
+    def _variant_index(block, position, count):
+        """Wählt Varianten räumlich gemischt und über Chunk-Updates stabil."""
+        x, y, z = position
+        block_offset = sum((i + 1) * ord(char)
+                           for i, char in enumerate(block))
+        return (x * 73856093 ^ y * 19349663 ^ z * 83492791
+                ^ block_offset) % count
 
 
 
@@ -256,9 +328,11 @@ class Chunk:
         for (x, y, z), block in own.items():
             if (x, y, z) not in solid_here:
                 continue
-            uv = atlas_uv.get(block)
-            if uv is None:
+            variants = atlas_uv.get(block)
+            if not variants:
                 continue
+            uv = variants[self.texture_library._variant_index(
+                block, (x, y, z), len(variants))]
             u0, v0, u1, v1 = uv
             corner_uvs = ((u0, v0), (u0, v1), (u1, v1), (u1, v0))
             for (dx, dy, dz), corners in faces:
@@ -490,4 +564,3 @@ class VoxelWorld:
 
         self.add_chunk(chunk)
         return chunk
-
