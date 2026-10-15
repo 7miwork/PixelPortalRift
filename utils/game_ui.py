@@ -78,7 +78,8 @@ def _surface_to_texture(surf):
 class IconLibrary:
     """Liefert pro Item-Name eine (Textur, Farbe) – gecacht.
 
-    Reihenfolge: Block-PNG (passt zur sichtbaren Welt) > prozedurale
+    Reihenfolge: custom_blocks-Bild (wie in der sichtbaren Welt) >
+    Block-PNG > prozedurale
     Item-Zeichnung (asset_loader, wie im 2D-Spiel) > BLOCK_PROPERTIES-Farbe
     > grau. pygame wird nur fürs einmalige Zeichnen der Icons gebraucht.
     """
@@ -88,13 +89,52 @@ class IconLibrary:
         self._loader.load_item_textures()   # zeichnet alle Item-Icons einmalig
         self._cache = {}
 
+    _ICON_CELL = 64   # Kantenlänge für skalierte Eigenbilder (pixelig)
+
+    @staticmethod
+    def _custom_image(name):
+        """Erstes Bild aus assets/custom_blocks/<name>/ als Textur oder None.
+
+        Variantenreihenfolge und Zuschnitt sind identisch mit
+        BlockTextureLibrary._get_block_images in voxel_world.py, damit
+        Hotbar/Inventar und Welt dasselbe Bild zeigen.
+        """
+        folder = os.path.join("assets", "custom_blocks", name)
+        if not os.path.isdir(folder):
+            return None
+        extensions = {".png", ".jpg", ".jpeg", ".bmp", ".webp"}
+        files = sorted(
+            (f for f in os.listdir(folder)
+             if os.path.isfile(os.path.join(folder, f))
+             and os.path.splitext(f)[1].lower() in extensions),
+            key=str.casefold,
+        )
+        if not files:
+            return None
+        try:
+            with Image.open(os.path.join(folder, files[0])) as source:
+                img = source.convert("RGBA")
+                width, height = img.size
+                side = min(width, height)
+                left = (width - side) // 2
+                top = (height - side) // 2
+                img = img.crop((left, top, left + side, top + side))
+                img = img.resize((IconLibrary._ICON_CELL, IconLibrary._ICON_CELL),
+                                 Image.Resampling.NEAREST)
+        except (OSError, ValueError):
+            return None
+        return _nearest(Texture(img))
+
     def get(self, name):
         if name in self._cache:
             return self._cache[name]
 
         tex, col = None, None
         png = os.path.join("assets", "blocks", f"{name}.png")
-        if name in BLOCK_PROPERTIES:
+        custom = self._custom_image(name)
+        if custom is not None:
+            tex = custom
+        elif name in BLOCK_PROPERTIES:
             if os.path.exists(png):
                 tex = _nearest(Texture(png))
             else:
