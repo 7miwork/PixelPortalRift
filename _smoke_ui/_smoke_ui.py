@@ -17,8 +17,10 @@ def main():
     crafting = CraftingSystem()
     ui = GameUI(inventory, crafting)
     invoke(application.quit, delay=0.5)
-    app.run()
-    print("UI_SMOKE_OK", flush=True)
+    try:
+        app.run()
+    finally:
+        print("UI_SMOKE_OK", flush=True)
 
 
 if __name__ == "__main__":

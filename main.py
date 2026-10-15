@@ -181,7 +181,12 @@ class Game(Entity):
         """Alle Tasten an die Oberflaeche (GameUI) weiterleiten.
 
         Das Inventar verwaltet Hotbar-Auswahl, Menüs und Welt-Interaktionen.
+        F3 blendet das HUD (Position/FPS) ein/aus – Toggle bleibt in main.py,
+        weil hud_text dieser Klasse gehört.
         """
+        if key == "f3":
+            self.hud_text.enabled = not self.hud_text.enabled
+            return
         if self.ui.handle_key(key) or self.ui.any_open:
             return
         if key == "left mouse down":
