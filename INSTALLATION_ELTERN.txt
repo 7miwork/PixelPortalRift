@@ -1,0 +1,90 @@
+# PixelPortalRift – Automatische Einrichtung für Eltern (Windows)
+
+## So wird es verwendet (für Eltern – 3 Schritte)
+
+1. **PowerShell öffnen**: Windows-Taste drücken → "PowerShell" tippen →
+   "Windows PowerShell" mit der rechten Maustaste anklicken →
+   "Als Administrator ausführen" wählen.
+2. **Den folgenden Einzeiler kopieren** (Strg+C), in das PowerShell-Fenster
+   einfügen (Strg+V oder Rechtsklick) und mit **Enter** bestätigen.
+3. **Warten**, bis alles fertig ist. Am Ende öffnet sich Visual Studio Code
+   automatisch mit dem Spielordner. Das Spiel startet man mit
+   `python main.py` im Terminal von VS Code (oder per F5).
+
+> Hinweis: Die Installation kann je nach Internetverbindung 5–15 Minuten dauern.
+> Währenddessen nicht das Fenster schließen. Bei Fragen bei einem der
+> automatischen Lizenzen-Hinweise einfach "J"/"Y" bestätigen.
+
+---
+
+## Der Einzeiler (kopieren und in PowerShell einfügen)
+
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force; $p="$env:USERPROFILE\\PixelPortalRift"; if (-not (Test-Path $p)) { New-Item -ItemType Directory -Path $p -Force | Out-Null }; Set-Location $p; winget install -e --id Microsoft.VisualStudioCode --accept-package-agreements --accept-source-agreements --silent; winget install -e --id Python.Python.3.11 --accept-package-agreements --accept-source-agreements --silent; winget install -e --id Git.Git --accept-package-agreements --accept-source-agreements --silent; $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User"); git clone https://github.com/7miwork/neurologie-schwyz.git "$p\\PixelPortalRift"; Set-Location "$p\\PixelPortalRift"; python -m pip install --upgrade pip; python -m pip install -r requirements.txt; code "$p\\PixelPortalRift"
+
+---
+
+## Was der Einzeiler genau macht (Erklärung)
+
+Schritt für Schritt, damit Eltern verstehen, was passiert:
+
+1. **Set-ExecutionPolicy ...** – Erlaubt dem aktuellen PowerShell-Fenster, Skripte
+   auszuführen (nur für dieses Fenster, nicht dauerhaft). Wird danach wieder
+   zurückgesetzt.
+2. **$p = ...\\PixelPortalRift** – Legt einen Ordner "PixelPortalRift" im
+   Benutzerprofil (z. B. C:\Users\Name\) an. Dort landet alles.
+3. **winget install ... VisualStudioCode** – Installiert Visual Studio Code
+   (der Editor, in dem der Schüler programmiert) über den Windows-Paketmanager.
+4. **winget install ... Python.Python.3.11** – Installiert Python 3.11, die
+   Programmiersprache des Spiels.
+5. **winget install ... Git.Git** – Installiert Git, um den Spielcode
+   herunterzuladen.
+6. **$env:Path = ...** – Aktualisiert die Pfad-Variablen, damit die gerade
+   installierten Programme (python, git, code) sofort nutzbar sind, ohne
+   Neustart.
+7. **git clone ...** – Lädt den Spielcode von GitHub in den Ordner
+   "PixelPortalRift" herunter.
+8. **pip install --upgrade pip** – Aktualisiert den Python-Paketmanager.
+9. **pip install -r requirements.txt** – Installiert die vier Spiel-Bibliotheken:
+   - ursina (3D-Spiel-Engine)
+   - numpy (Weltgenerierung)
+   - pillow (Bilder/Texturen)
+   - pygame (Item-Icons)
+10. **code ...** – Öffnet Visual Studio Code mit dem Spielordner.
+
+## Voraussetzungen
+
+- Windows 10 (Version 1809+) oder Windows 11.
+- Internetverbindung.
+- Administrator-Rechte (daher "Als Administrator ausführen").
+- Etwa 2–3 GB freier Speicherplatz.
+
+## Falls etwas nicht klappt
+
+- **"winget wird nicht erkannt"**: Windows ist zu alt oder der App Installer fehlt.
+  Dann zuerst aus dem Microsoft Store "App Installer" installieren oder Windows
+  aktualisieren.
+- **"Python wird nicht erkannt"**: PowerShell-Fenster schließen und neu öffnen,
+  dann `python --version` prüfen.
+- **"git clone" schlägt fehl**: Eventuell Firewall/Proxy. Manuell ZIP von
+  https://github.com/7miwork/neurologie-schwyz herunterladen und entpacken.
+- **Spiel startet nicht**: In VS Code Terminal `python main.py` ausführen und
+  die Fehlermeldung dem Schüler/Lehrer schicken.
+
+## Nach der Installation – Spiel starten
+
+In VS Code: Terminal öffnen (Strg+` oder Menü "Terminal → Neues Terminal") und:
+
+    python main.py
+
+
+
+## VS Code Erweiterungen (Einzeiler für VS Code, Python und nötige Extensions)
+
+Windows (PowerShell):
+
+code --install-extension ms-python.python; code --install-extension ms-python.vscode-pylance; code --install-extension ms-toolsai.jupyter
+
+macOS (Terminal):
+
+code --install-extension ms-python.python; code --install-extension ms-python.vscode-pylance; code --install-extension ms-toolsai.jupyter
+

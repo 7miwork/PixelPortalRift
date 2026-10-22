@@ -1,0 +1,88 @@
+# PixelPortalRift – Automatische Einrichtung für Eltern (macOS)
+
+## So wird es verwendet (für Eltern – 3 Schritte)
+
+1. **Terminal öffnen**: `Cmd + Leertaste` drücken → "Terminal" tippen → Enter.
+   (Alternativ: Finder → Programme → Dienstprogramme → Terminal.)
+2. **Den folgenden Einzeiler kopieren** (Cmd+C), in das Terminal-Fenster
+   einfügen (Cmd+V) und mit **Enter** bestätigen.
+3. **Warten**, bis alles fertig ist. Am Ende öffnet sich Visual Studio Code
+   automatisch mit dem Spielordner. Das Spiel startet man mit
+   `python3 main.py` im Terminal von VS Code (oder per F5).
+
+> Hinweis: Die Installation kann je nach Internetverbindung 5–15 Minuten dauern.
+> Währenddessen nicht das Fenster schließen. Bei Homebrew-Lizenzen-Hinweisen
+> einfach "Return"/Enter bestätigen.
+
+---
+
+## Der Einzeiler (kopieren und in Terminal einfügen)
+
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"; eval "$(/opt/homebrew/bin/brew shellenv 2>/dev/null || /usr/local/bin/brew shellenv)"; brew install --cask visual-studio-code; brew install python@3.11; brew install git; mkdir -p "$HOME/PixelPortalRift"; cd "$HOME/PixelPortalRift"; git clone https://github.com/7miwork/neurologie-schwyz.git "$HOME/PixelPortalRift/PixelPortalRift"; cd "$HOME/PixelPortalRift/PixelPortalRift"; python3 -m pip install --upgrade pip; python3 -m pip install -r requirements.txt; code "$HOME/PixelPortalRift/PixelPortalRift"
+
+---
+
+## Was der Einzeiler genau macht (Erklärung)
+
+Schritt für Schritt, damit Eltern verstehen, was passiert:
+
+1. **Homebrew installieren** – Der Paketmanager für macOS. Falls bereits
+   installiert, passiert nichts weiter (der Befehl überspringt dann).
+2. **brew shellenv** – Aktualisiert die Pfad-Variablen, damit die gerade
+   installierten Programme (python3, git, code) sofort nutzbar sind.
+3. **brew install --cask visual-studio-code** – Installiert Visual Studio Code
+   (der Editor, in dem der Schüler programmiert).
+4. **brew install python@3.11** – Installiert Python 3.11, die
+   Programmiersprache des Spiels.
+5. **brew install git** – Installiert Git, um den Spielcode herunterzuladen.
+6. **mkdir / cd** – Legt einen Ordner "PixelPortalRift" im Benutzerprofil
+   (z. B. /Users/Name/) an. Dort landet alles.
+7. **git clone ...** – Lädt den Spielcode von GitHub in den Ordner
+   "PixelPortalRift" herunter.
+8. **pip install --upgrade pip** – Aktualisiert den Python-Paketmanager.
+9. **pip install -r requirements.txt** – Installiert die vier Spiel-Bibliotheken:
+   - ursina (3D-Spiel-Engine)
+   - numpy (Weltgenerierung)
+   - pillow (Bilder/Texturen)
+   - pygame (Item-Icons)
+10. **code ...** – Öffnet Visual Studio Code mit dem Spielordner.
+
+## Voraussetzungen
+
+- macOS 11 (Big Sur) oder neuer (Intel- oder Apple-Silicon-Mac).
+- Internetverbindung.
+- Administrator-Rechte (Homebrew fragt bei Bedarf nach dem Passwort).
+- Etwa 2–3 GB freier Speicherplatz.
+
+## Falls etwas nicht klappt
+
+- **"command not found: brew"**: Terminal schließen und neu öffnen, dann
+  `/opt/homebrew/bin/brew --version` (Apple Silicon) oder
+  `/usr/local/bin/brew --version` (Intel) prüfen.
+- **"Python wird nicht erkannt"**: `python3 --version` prüfen. Ggf. Terminal
+  neu öffnen oder `brew link python@3.11` ausführen.
+- **"git clone" schlägt fehl**: Eventuell Firewall/Proxy. Manuell ZIP von
+  https://github.com/7miwork/neurologie-schwyz herunterladen und entpacken.
+- **VS Code öffnet sich nicht automatisch**: Im Terminal `code` eingeben
+  oder VS Code manuell starten und den Ordner "PixelPortalRift" öffnen.
+- **Spiel startet nicht**: In VS Code Terminal `python3 main.py` ausführen und
+  die Fehlermeldung dem Schüler/Lehrer schicken.
+
+## Nach der Installation – Spiel starten
+
+In VS Code: Terminal öffnen (Ctrl+` oder Menü "Terminal → New Terminal") und:
+
+    python3 main.py
+
+
+
+## VS Code Erweiterungen (Einzeiler für VS Code, Python und nötige Extensions)
+
+Windows (PowerShell):
+
+code --install-extension ms-python.python; code --install-extension ms-python.vscode-pylance; code --install-extension ms-toolsai.jupyter
+
+macOS (Terminal):
+
+code --install-extension ms-python.python; code --install-extension ms-python.vscode-pylance; code --install-extension ms-toolsai.jupyter
+
