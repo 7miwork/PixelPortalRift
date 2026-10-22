@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Ursina cache
+.ursina/
+
+# Virtual env
+.venv/
+venv/
+
+# IDE
+.vscode/
+*.code-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Smoke test artifacts (keep scripts, ignore outputs)
+diag_shot.png
