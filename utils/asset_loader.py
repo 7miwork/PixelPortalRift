@@ -382,6 +382,56 @@ class AssetLoader:
             # Brot: ovaler Laib
             pygame.draw.ellipse(surface, (210, 180, 140), (4, 12, 24, 12))
             pygame.draw.arc(surface, (180, 150, 100), (4, 12, 24, 12), 0, 3.14, 2)
+        elif item_name == "coal":
+            pygame.draw.ellipse(surface, (40, 40, 40), (6, 6, 20, 20))
+            pygame.draw.ellipse(surface, (80, 80, 80), (10, 10, 10, 10))
+        elif item_name == "iron_ingot":
+            pygame.draw.rect(surface, (200, 200, 210), (6, 10, 20, 12))
+            pygame.draw.rect(surface, (150, 150, 160), (6, 10, 20, 4))
+        elif item_name == "gold_ingot":
+            pygame.draw.rect(surface, (255, 215, 0), (6, 10, 20, 12))
+            pygame.draw.rect(surface, (200, 170, 0), (6, 10, 20, 4))
+        elif item_name == "stick":
+            pygame.draw.line(surface, (139, 90, 43), (8, 28), (24, 4), 4)
+        elif item_name == "cooked_fish":
+            pygame.draw.ellipse(surface, (180, 120, 60), (4, 12, 24, 10))
+            pygame.draw.polygon(surface, (180, 120, 60), [(28, 17), (32, 12), (32, 22)])
+        elif item_name == "gravel":
+            for (x, y) in ((6,6),(14,8),(22,6),(10,16),(18,18),(8,24),(20,24)):
+                pygame.draw.circle(surface, (160, 160, 160), (x, y), 3)
+        elif item_name == "torch":
+            pygame.draw.line(surface, (139, 90, 43), (16, 28), (16, 12), 3)
+            pygame.draw.polygon(surface, (255, 160, 40), [(16, 2), (22, 12), (10, 12)])
+        elif item_name == "pearl":
+            pygame.draw.circle(surface, (240, 240, 255), (16, 16), 8)
+            pygame.draw.circle(surface, (180, 180, 220), (16, 16), 4)
+        elif item_name == "crystal_shard":
+            pygame.draw.polygon(surface, (180, 220, 255), [(16, 2), (26, 12), (20, 30), (10, 26), (6, 14)])
+        elif item_name == "ruby":
+            pygame.draw.polygon(surface, (220, 20, 60), [(16, 2), (28, 16), (16, 30), (4, 16)])
+            pygame.draw.polygon(surface, (255, 100, 120), [(16, 6), (24, 16), (16, 26), (8, 16)])
+        elif item_name == "emerald":
+            pygame.draw.polygon(surface, (0, 180, 80), [(16, 2), (28, 16), (16, 30), (4, 16)])
+            pygame.draw.polygon(surface, (100, 255, 150), [(16, 6), (24, 16), (16, 26), (8, 16)])
+        elif item_name == "diamond":
+            pygame.draw.polygon(surface, (100, 220, 255), [(16, 2), (28, 16), (16, 30), (4, 16)])
+            pygame.draw.polygon(surface, (200, 245, 255), [(16, 6), (24, 16), (16, 26), (8, 16)])
+        elif item_name == "anchor_piece":
+            pygame.draw.circle(surface, (150, 150, 150), (16, 8), 5)
+            pygame.draw.line(surface, (150, 150, 150), (16, 13), (16, 28), 4)
+            pygame.draw.line(surface, (150, 150, 150), (8, 24), (24, 24), 3)
+        elif item_name == "slime_ball":
+            pygame.draw.circle(surface, (80, 200, 80), (16, 16), 8)
+            pygame.draw.circle(surface, (150, 255, 150), (12, 12), 3)
+        elif item_name == "rotten_flesh":
+            pygame.draw.ellipse(surface, (160, 120, 80), (6, 8, 20, 18))
+            pygame.draw.circle(surface, (100, 70, 40), (14, 14), 2)
+            pygame.draw.circle(surface, (100, 70, 40), (20, 20), 2)
+        elif item_name == "shark_tooth":
+            pygame.draw.polygon(surface, (245, 245, 245), [(12, 28), (16, 6), (20, 28)])
+        elif item_name == "radiation_suit":
+            pygame.draw.rect(surface, (220, 220, 60), (6, 4, 20, 24))
+            pygame.draw.rect(surface, (60, 60, 60), (10, 8, 12, 6))
         else:
             # Fallback: Wenn das Item ein Block ist, zeige die Block-Farbe
             if item_name in BLOCK_PROPERTIES and BLOCK_PROPERTIES[item_name]["color"]:
