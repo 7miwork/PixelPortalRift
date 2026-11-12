@@ -131,7 +131,7 @@ DIMENSIONS = {
         "sky_color": LIGHT_BLUE,
         "ground_level": 50,
         "blocks": ["grass", "dirt", "stone", "wood", "leaves", "coal_ore"],
-        "mobs": ["slime", "zombie"],
+        "mobs": ["slime", "zombie", "elite_zombie"],
         "portal_activator": None,          # Startwelt: kein Schlüssel nötig
         "next_dimension": "stone_world"    # Portal führt in die Steinwelt
     },
@@ -171,7 +171,7 @@ DIMENSIONS = {
         "sky_color": (50, 50, 0),
         "ground_level": 55,
         "blocks": ["uranium", "plutonium", "nuclear_waste", "lead", "reactor_core", "contaminated_stone"],
-        "mobs": ["mutant", "radioactive_slime"],
+        "mobs": ["mutant", "radioactive_slime", "fire_demon"],
         "portal_activator": "nuclear_key",
         "next_dimension": "dimensional_rift"  # Letzte Welt: führt zum Dimensions-Riss
     }
@@ -307,6 +307,8 @@ ITEM_PROPERTIES = {
     "iron_sword": {"stackable": False, "max_stack": 1, "type": "weapon", "damage": 6, "durability": 251},
     "diamond_sword": {"stackable": False, "max_stack": 1, "type": "weapon", "damage": 8, "durability": 1000},
     "overpowered_sword": {"stackable": False, "max_stack": 1, "type": "weapon", "damage": 50, "durability": 2500},  # Extrem starkes Schwert (nur von Bossen)
+    "diamond_sword_op": {"stackable": False, "max_stack": 1, "type": "weapon", "damage": 18, "durability": 1500},  # Overpowered Diamantschwert (Drop von Elite-Zombies)
+    "fire_axe": {"stackable": False, "max_stack": 1, "type": "tool", "tool_type": "axe", "durability": 800, "power": 6, "damage": 12},  # Feueraxt (Drop von Feuerdämonen)
 
     # ---- Essen ----
     "apple": {"stackable": True, "max_stack": 64, "type": "food", "heal": 4, "hunger": 4},
@@ -390,7 +392,9 @@ MOB_PROPERTIES = {
     "crystal_golem": {"health": 60, "damage": 6, "speed": 0.4, "drop": "crystal_shard", "color": PURPLE, "size": (32, 40), "is_boss": True},
     "gem_spider": {"health": 15, "damage": 4, "speed": 1.5, "drop": "ruby", "color": RED, "size": (24, 16)},
     "mutant": {"health": 40, "damage": 8, "speed": 1.0, "drop": "uranium", "color": (150, 255, 0), "size": (28, 36)},
-    "radioactive_slime": {"health": 25, "damage": 5, "speed": 0.8, "drop": "nuclear_waste", "color": (100, 255, 100), "size": (28, 28)}
+    "radioactive_slime": {"health": 25, "damage": 5, "speed": 0.8, "drop": "nuclear_waste", "color": (100, 255, 100), "size": (28, 28)},
+    "elite_zombie": {"health": 80, "damage": 12, "speed": 1.2, "drop": "diamond_sword_op", "color": (80, 0, 0), "size": (32, 40), "is_boss": True},
+    "fire_demon": {"health": 100, "damage": 15, "speed": 1.0, "drop": "fire_axe", "color": (255, 80, 0), "size": (36, 44), "is_boss": True},
 }
 
 # =========================================================

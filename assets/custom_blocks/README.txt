@@ -51,17 +51,35 @@ Was passiert, wenn kein Bild da ist?
 
 Alle 38 Block-Ordner (Namen exakt so übernehmen)
 ------------------------------------------------
-amethyst              ancient_key_vein      clay
-coal_ore              cobblestone           contaminated_stone
-coral                 crystal               crystal_key_vein
-diamond_ore           dirt                  emerald_ore
-frozen_key_vein       gold_ore              gravel
-grass                 iron_ore              lead
-leaves                nuclear_waste         obsidian
-pearl_key_vein        pearl_ore             plutonium
-portal                portal_frame_gem_world      portal_frame_grassland
-portal_frame_nuclear_world     portal_frame_stone_world
-portal_frame_water_world       reactor_core
-ruby_ore              sand                  seaweed
-stone                 uranium               water
+amethyst                    ancient_key_vein          clay
+coal_ore                    cobblestone               contaminated_stone
+coral                       crystal                   crystal_key_vein
+diamond_ore                 dirt                      emerald_ore
+frozen_key_vein             gold_ore                  gravel
+grass                       iron_ore                  lead
+leaves                      nuclear_waste             obsidian
+pearl_key_vein              pearl_ore                 plutonium
+portal                      portal_frame_gem_world    portal_frame_grassland
+portal_frame_nuclear_world  portal_frame_stone_world
+portal_frame_water_world    reactor_core
+ruby_ore                    sand                      seaweed
+stone                       uranium                   water
 wood
+
+
+Deutsche Namen
+
+Amethyst                        Ader mit antikem Schlüssel     Ton
+Kohleerz                        Bruchstein                     kontaminierter Stein
+Koralle                         Kristall                       Ader mit Kristallschlüssel
+Diamanterz                      Erde                           Smaragderz
+Ader mit gefrorenem Schlüssel   Golderz                        Kies
+Gras                            Eisenerz                       Blei
+Blätter                         Atommüll                       Obsidian
+Ader mit Perlenschlüssel        Perlenerz                      Plutonium
+Portal                          Portalrahmen (Edelsteinwelt)   Portalrahmen (Grasland)
+Portalrahmen (Atomwelt)         Portalrahmen (Steinwelt)
+Portalrahmen (Wasserwelt)       Reaktorkern
+Rubinerz                        Sand                           Seetang
+Stein                           Uran                           Wasser
+Holz

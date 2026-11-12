@@ -276,13 +276,13 @@ class InventoryPanel(Entity):
 
         # Abdunkelnder Hintergrund über dem gesamten Bildschirm
         Entity(parent=self, model="quad", scale=(4, 3),
-               color=color.rgba(0, 0, 0, 0.55))
+               color=color.rgba(0, 0, 0, 0.6))
 
         # Panel (Titel + Raster), zentriert
         self.panel = Entity(parent=self, model="quad",
                             scale=(9 * (SLOT + SLOT_GAP) + 0.06,
                                    INV_ROWS * (SLOT + SLOT_GAP) + 0.14),
-                            color=color.rgba(0.12, 0.12, 0.12, 0.97))
+                            color=color.rgba(0.10, 0.10, 0.12, 0.98))
         self.title = Text(parent=self, text="Inventar",
                           origin=(0, 0), scale=0.7, y=0.135,
                           color=color.white)
@@ -371,21 +371,21 @@ class CraftingPanel(Entity):
         self.on_change = on_change
 
         Entity(parent=self, model="quad", scale=(4, 3),
-               color=color.rgba(0, 0, 0, 0.55))
+               color=color.rgba(0, 0, 0, 0.6))
         self.panel = Entity(parent=self, model="quad",
-                            scale=(1.10, 1.05),
-                            color=color.rgba(0.12, 0.12, 0.12, 0.97))
+                            scale=(1.25, 1.15),
+                            color=color.rgba(0.10, 0.10, 0.12, 0.98))
         self.title = Text(parent=self, text="Fertigen",
-                          origin=(0, 0), scale=0.75, y=0.38,
+                          origin=(0, 0), scale=0.9, y=0.45,
                           color=color.white)
 
-        row_y = 0.30
+        row_y = 0.34
         self.rows = []
         self.row_content = []
         for i in range(CRAFT_ROWS):
             row_ent = Entity(parent=self, position=(0, row_y),
-                             model="quad", scale=(0.88, CRAFT_ROW_H),
-                             color=color.rgba(0.28, 0.28, 0.32, 1),
+                             model="quad", scale=(1.06, CRAFT_ROW_H),
+                             color=color.rgba(0.22, 0.22, 0.26, 1),
                              collider="box")
             row_ent.on_click = lambda i=i: self._click(i)
             self.rows.append(row_ent)
@@ -393,19 +393,19 @@ class CraftingPanel(Entity):
             row_y -= CRAFT_ROW_H + 0.010
 
         self.scrollbar_track = Entity(parent=self, model="quad",
-                                      scale=(0.010, 0.55),
-                                      position=(0.5, 0),
-                                      color=color.rgba(0.4, 0.4, 0.4, 0.9))
+                                      scale=(0.010, 0.60),
+                                      position=(0.58, 0),
+                                      color=color.rgba(0.35, 0.35, 0.40, 0.9))
         self.scrollbar_thumb = Entity(parent=self, model="quad",
-                                      scale=(0.010, 0.08),
-                                      position=(0.5, 0.275),
-                                      color=color.rgba(0.7, 0.7, 0.7, 0.9),
+                                      scale=(0.010, 0.10),
+                                      position=(0.58, 0.275),
+                                      color=color.rgba(0.75, 0.75, 0.80, 0.95),
                                       enabled=False)
 
         self.footer = Text(parent=self, text="Klick = herstellen | "
                                          "Mausrad = blättern | C = schliessen",
-                           origin=(0, 0), scale=0.42, y=-0.44,
-                           color=color.rgba(0.8, 0.8, 0.8, 0.9))
+                           origin=(0, 0), scale=0.40, y=-0.49,
+                           color=color.rgba(0.75, 0.75, 0.75, 0.95))
 
     def _click(self, row_index):
         """Mausklick auf eine Rezeptzeile → craft_selected."""
@@ -441,32 +441,37 @@ class CraftingPanel(Entity):
 
         recipe_name, recipe_data = can[idx][:2]
         selected = (idx == crafting.selected_recipe)
+        can_craft_flag = can[idx][2]
         row.enabled = True
-        row.color = color.rgba(0.35, 0.35, 0.45, 1) if not selected \
-            else color.rgba(0.45, 0.45, 0.6, 1)
+        if selected:
+            row.color = color.rgba(0.50, 0.50, 0.70, 1)
+        elif can_craft_flag:
+            row.color = color.rgba(0.30, 0.32, 0.40, 1)
+        else:
+            row.color = color.rgba(0.20, 0.20, 0.24, 1)
 
-        # Icon
+        # Icon (grösser, besser sichtbar)
         tex, col = self.icons.get(recipe_name)
-        icon = Entity(parent=row, model="quad", scale=(0.045, 0.045),
-                      x=-0.40)
+        icon = Entity(parent=row, model="quad", scale=(0.055, 0.055),
+                      x=-0.44)
         self.row_content[i].append(icon)
         if tex is not None:
             icon.texture = tex
             icon.color = color.white
         else:
             icon.texture = _WHITE
-            icon.color = col
+            icon.color = col if col is not None else color.rgba(0.6, 0.6, 0.6, 1)
 
         # Name + Ergebnis
         name_text = Text(parent=row, text=recipe_name, origin=(-0.5, 0),
-                         x=-0.36, y=0.012, scale=0.42,
+                         x=-0.37, y=0.010, scale=0.50,
                          color=color.white)
         self.row_content[i].append(name_text)
         result = recipe_data.get("result_count", 1)
         if result > 1:
             result_text = Text(parent=row, text="x%d" % result,
-                               origin=(0.5, -0.5), x=-0.36, y=-0.012,
-                               scale=0.30, color=color.rgba(0.8, 0.8, 0.8, 0.8))
+                               origin=(0.5, -0.5), x=-0.37, y=-0.010,
+                               scale=0.35, color=color.rgba(0.85, 0.85, 0.85, 0.9))
             self.row_content[i].append(result_text)
 
         # Zutaten (CraftingSystem: ingredients = dict Name → Anzahl)
@@ -478,13 +483,11 @@ class CraftingPanel(Entity):
             ok = have >= need
             ingredient_text = Text(
                 parent=row, text="%s: %d/%d" % (ing_name, have, need),
-                origin=(-0.5, 0), x=-0.08, y=0.012 - j * 0.016,
-                scale=0.34, color=color.green if ok else color.red,
+                origin=(-0.5, 0), x=0.02, y=0.010 - j * 0.018,
+                scale=0.40,
+                color=color.rgba(0.4, 1, 0.4, 1) if ok else color.rgba(1, 0.4, 0.4, 1),
             )
             self.row_content[i].append(ingredient_text)
-
-        if selected:
-            row.color = color.rgba(0.45, 0.45, 0.6, 1)
 
     def open(self):
         self.enabled = True
