@@ -26,11 +26,14 @@ from ursina import (
     Ursina,
     camera,
     color,
+    destroy,
+    mouse,
     raycast,
     time,
     window,
 )
 from utils.player_controller import VoxelPlayer
+from utils.menu import MenuManager
 
 from utils.constants import (
     BLOCK_PROPERTIES,
@@ -44,6 +47,7 @@ from utils.inventory import Inventory
 from utils.crafting import CraftingSystem
 from utils.game_ui import GameUI
 from utils.voxel_world import VoxelWorld, BlockTextureLibrary
+from utils.save_system import SaveSystem
 
 
 def rgb_to_ursina_color(rgb):
@@ -93,22 +97,15 @@ class Game(Entity):
         DirectionalLight(y=10, z=-10, shadows=False, rotation=(45, -45, 0))
         AmbientLight(color=color.rgba(0.6, 0.6, 0.6, 1))
 
-        # ---- Welt: chunkweise 3D-Terrain-Generierung ----
-        self.world = VoxelWorld(BlockTextureLibrary())
-        spawn = self.world.generate_dimension()
+        # Welt, Spieler und UI werden erst beim Spielstart erzeugt
+        self.world = None
+        self.player = None
+        self.ui = None
+        self.menu_manager = None
+        self.crosshair = None
 
-        # ---- Spieler: eigener Controller mit Voxel-Kollision ----
-        # (utils/player_controller.VoxelPlayer statt des Ursina-Prefabs:
-        #  der Prefab fällt beim Bewegen durch die Welt, siehe Modul-Doku.)
-        spawn_x, spawn_y, spawn_z = spawn
-        self.player = VoxelPlayer(
-            self.world,
-            position=(spawn_x, spawn_y + 1.8, spawn_z),
-            speed=PLAYER_SPEED_3D,
-            jump_height=PLAYER_JUMP_HEIGHT_3D,
-        )
-        # Schwerkraft aus constants.py (statt Ursina-Standard)
-        self.player.gravity = PLAYER_GRAVITY_3D
+        # Speichersystem (fuer Save/Load)
+        self.save_system = SaveSystem()
 
         # ---- HUD: Positions-Anzeige (Vorstufe des späteren F3-Debug) ----
         self.hud_text = Text(
@@ -142,11 +139,154 @@ class Game(Entity):
             player=self.player, crosshair=self.crosshair,
         )
 
+        # Hauptmenü erst anzeigen, nachdem HUD, Crosshair und UI existieren.
+        self.menu_manager = MenuManager(self)
+        self.menu_manager.show_main_menu()
+
     # =========================================================
     # UPDATE (wird jeden Frame von Ursina aufgerufen)
     # =========================================================
+
+    def start_new_game(self):
+        """Neues Spiel: Welt generieren, Spieler erstellen, UI initialisieren."""
+        self._cleanup_active_game()
+        self.inventory = Inventory()
+        self.crafting = CraftingSystem()
+        self.current_dimension = "grassland"
+        self.world = VoxelWorld(BlockTextureLibrary())
+        spawn = self.world.generate_dimension()
+        spawn_x, spawn_y, spawn_z = spawn
+
+        self.player = VoxelPlayer(
+            self.world,
+            position=(spawn_x, spawn_y + 1.8, spawn_z),
+            speed=PLAYER_SPEED_3D,
+            jump_height=PLAYER_JUMP_HEIGHT_3D,
+        )
+        self.player.gravity = PLAYER_GRAVITY_3D
+
+        self.ui = GameUI(
+            self.inventory, self.crafting,
+            player=self.player, crosshair=self.crosshair,
+        )
+        self._set_game_active(True)
+
+    def load_game(self, slot_name):
+        """Gespeichertes Spiel laden. Gibt True zurueck bei Erfolg."""
+        from utils.save_system import SaveSystem
+        save_system = SaveSystem()
+        save_data, msg = save_system.load_game(slot_name)
+        if save_data is None:
+            return False, msg
+
+        self._cleanup_active_game()
+        self.inventory = Inventory()
+        self.crafting = CraftingSystem()
+
+        # Spieler-Position wiederherstellen
+        player_data = save_data.get("player", {})
+        px, py, pz = player_data.get("x", 0), player_data.get("y", 0), player_data.get("z", 0)
+
+        self.world = VoxelWorld(BlockTextureLibrary())
+        # Welt-Daten wiederherstellen (falls gespeichert)
+        world_data = save_data.get("world")
+        if world_data:
+            self.world.data.load_save_data(world_data)
+
+        inventory_data = save_data.get("inventory")
+        if inventory_data is not None:
+            self.inventory.load_save_data(inventory_data)
+
+        world_dimension = world_data.get("dimension") if world_data else None
+        if world_dimension in DIMENSIONS:
+            self.world.data.dimension = world_dimension
+            self.world.data.dimension_data = DIMENSIONS[world_dimension]
+
+        spawn = (px, py, pz)
+        spawn_x, spawn_y, spawn_z = spawn
+
+        self.world.ensure_chunks_around(spawn_x, spawn_z)
+
+        self.player = VoxelPlayer(
+            self.world,
+            position=(spawn_x, spawn_y, spawn_z),
+            speed=PLAYER_SPEED_3D,
+            jump_height=PLAYER_JUMP_HEIGHT_3D,
+        )
+        self.player.gravity = PLAYER_GRAVITY_3D
+
+        self.ui = GameUI(
+            self.inventory, self.crafting,
+            player=self.player, crosshair=self.crosshair,
+        )
+
+        self.current_dimension = save_data.get("current_dimension", "grassland")
+        self._set_game_active(True)
+        return True, msg
+
+    def _cleanup_active_game(self):
+        """Entfernt alte Spieler-, Welt- und UI-Objekte vor einem Neustart oder Laden."""
+        if self.ui:
+            destroy(self.ui)
+            self.ui = None
+        if self.player:
+            destroy(self.player)
+            self.player = None
+        if self.world:
+            self.world.unload_all_chunks()
+            destroy(self.world.world_group)
+            self.world = None
+
+    def _set_game_active(self, active):
+        """Synchronisiert Maus, Crosshair und Spielersteuerung fuer Menue/Uebergang."""
+        if active:
+            mouse.locked = True
+            mouse.visible = False
+            if self.crosshair:
+                self.crosshair.enabled = True
+            if self.player:
+                self.player.controls_enabled = True
+        else:
+            mouse.locked = False
+            mouse.visible = True
+            if self.crosshair:
+                self.crosshair.enabled = False
+            if self.player:
+                self.player.controls_enabled = False
+
+    def save_game(self):
+        """Aktuellen Spielstand speichern. Gibt (ok, msg) zurueck."""
+        if self.world is None or self.player is None:
+            return False, "Kein laufendes Spiel!"
+
+        p = self.player.position
+        game_state = {
+            "player": self.player,
+            "inventory": self.inventory,
+            "world": self.world,
+            "current_dimension": self.current_dimension,
+            "visited_dimensions": set(),
+            "portal_system": None,
+            "mob_manager": None,
+        }
+        ok, msg = self.save_system.save_game(game_state)
+        return ok, msg
+
+    def stop_game(self):
+        """Welt und Spieler aufraeumen (zurueck zum Hauptmenü)."""
+        self._cleanup_active_game()
+        self._set_game_active(False)
+
     def update(self):
         """HUD, dynamisches Chunk-Streaming und Welt-Respawn pro Frame."""
+        # Wenn kein Spiel läuft (Hauptmenü), nichts tun
+        if self.world is None or self.player is None:
+            return
+        # Wenn Pausenmenü offen: Maus entsperren, kein Welt-Update
+        if self.menu_manager and self.menu_manager.pause_menu and self.menu_manager.pause_menu.enabled:
+            mouse.locked = False
+            mouse.visible = True
+            return
         p = self.player.position
 
         # Chunks um den Spieler herum nachladen bzw. entfernen
@@ -183,11 +323,35 @@ class Game(Entity):
         Das Inventar verwaltet Hotbar-Auswahl, Menüs und Welt-Interaktionen.
         F3 blendet das HUD (Position/FPS) ein/aus – Toggle bleibt in main.py,
         weil hud_text dieser Klasse gehört.
+        Escape öffnet das Pausenmenü.
         """
-        if key == "f3":
-            self.hud_text.enabled = not self.hud_text.enabled
+        if self.menu_manager and self.menu_manager.main_menu and self.menu_manager.main_menu.enabled:
+            self.menu_manager.main_menu.input(key)
             return
-        if self.ui.handle_key(key) or self.ui.any_open:
+        if key == "f3":
+            if self.hud_text:
+                self.hud_text.enabled = not self.hud_text.enabled
+            return
+        # Maus- und Tastatureingaben im Pausenmenue verarbeiten.
+        if self.menu_manager and self.menu_manager.pause_menu and self.menu_manager.pause_menu.enabled:
+            if key == "left mouse down":
+                self.menu_manager.pause_menu.input(key)
+                return
+        # Escape: Pausenmenü (nur im Spiel)
+        if key == "escape":
+            if self.menu_manager and self.menu_manager.in_game:
+                if self.menu_manager.pause_menu and self.menu_manager.pause_menu.enabled:
+                    self.menu_manager._resume_game()
+                else:
+                    self.menu_manager.show_pause_menu()
+            return
+        # Wenn Pausenmenü offen: keine Eingaben an das Spiel durchreichen
+        if self.menu_manager and self.menu_manager.pause_menu and self.menu_manager.pause_menu.enabled:
+            return
+        # Wenn kein Spiel läuft (Hauptmenü aktiv), keine Welt-Interaktion
+        if self.world is None or self.player is None:
+            return
+        if self.ui and (self.ui.handle_key(key) or self.ui.any_open):
             return
         if key == "left mouse down":
             self._break_targeted_block()

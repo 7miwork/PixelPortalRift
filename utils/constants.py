@@ -78,7 +78,7 @@ WORLD_HEIGHT = 100  # Die Welt ist 100 Blöcke hoch (Y-Obergrenze)
 # (beide horizontal!). WORLD_HEIGHT ist die maximale Y-Höhe.
 WORLD_DEPTH = 1000                   # Horizontale Ausdehnung der Welt in Z-Richtung (Blöcke)
 CHUNK_SIZE = 16                     # Ein Chunk ist 16×16 Blöcke Grundfläche (X/Z)
-RENDER_DISTANCE_CHUNKS = 3          # Wie viele Chunks um den Spieler herum gerendert werden
+RENDER_DISTANCE_CHUNKS = 1          # Wie viele Chunks um den Spieler herum gerendert werden
 CHUNK_HEIGHT = WORLD_HEIGHT         # Maximale Höhe eines Chunks (in Blöcken)
 
 # Höhe der flachen Oberfläche des Testchunks (Phase 1 – Grundgerüst):

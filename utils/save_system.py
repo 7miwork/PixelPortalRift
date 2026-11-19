@@ -63,21 +63,34 @@ class SaveSystem:
         save_path = os.path.join(self.save_dir, f"{slot_name}.json")
         
         # Alle relevanten Daten sammeln
+        player = game_state["player"]
+        position = getattr(player, "position", None)
+        player_x = getattr(player, "x", position.x if position is not None else 0)
+        player_y = getattr(player, "y", position.y if position is not None else 0)
+        player_z = getattr(player, "z", position.z if position is not None else 0)
+        portal_system = game_state.get("portal_system")
+        mob_manager = game_state.get("mob_manager")
+
         save_data = {
             "timestamp": datetime.now().isoformat(),  # Aktuelles Datum + Uhrzeit
             "player": {
-                "x": game_state["player"].x,
-                "y": game_state["player"].y,
-                "health": game_state["player"].health,
-                "hunger": game_state["player"].hunger,
-                "facing_right": game_state["player"].facing_right
+                "x": player_x,
+                "y": player_y,
+                "z": player_z,
+                "health": getattr(player, "health", 100),
+                "hunger": getattr(player, "hunger", 100),
+                "facing_right": getattr(player, "facing_right", True)
             },
             "inventory": game_state["inventory"].get_save_data(),
-            "world": game_state["world"].get_save_data(),
+            "world": (
+                game_state["world"].data.get_save_data()
+                if hasattr(game_state["world"], "data")
+                else game_state["world"].get_save_data()
+            ),
             "current_dimension": game_state["current_dimension"],
             "visited_dimensions": list(game_state["visited_dimensions"]),
-            "portals": game_state["portal_system"].get_save_data(),
-            "mobs": game_state["mob_manager"].get_save_data(),
+            "portals": portal_system.get_save_data() if portal_system is not None else [],
+            "mobs": mob_manager.get_save_data() if mob_manager is not None else [],
             # Der dimension_cache speichert alle besuchten Welten komplett.
             # Dadurch gehen beim Laden keine Welten-Daten verloren.
             "dimension_cache": game_state.get("dimension_cache", {})
